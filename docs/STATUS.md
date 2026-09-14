@@ -23,8 +23,9 @@ modules get implemented. See [`PRD.md`](PRD.md) for the design and rationale.
 | `src/core/frames/winnow.ts` | ✅ done | Stability gate: skip motion, emit one rep per settled distinct screen. |
 | `src/core/frames/extract.ts` | ✅ done | Fast ffmpeg input-seek; verifies a non-empty frame was written. |
 | `src/core/generate/generate.ts` | ✅ done¹ | Agentic vision LLM (Vercel AI SDK); id-referenced frames, guarded output, capped candidates; reviewed by skeptics and reworked. |
-| `src/core/render/docx.ts` | ✅ done | `docx` package; embedded, scaled images. |
-| `src/core/render/pdf.ts` | ✅ done | `pdfkit` (pure JS); embedded images. |
+| `src/core/render/docx.ts` | ✅ done | `docx`; embedded images bounded in both dimensions; content-typed. |
+| `src/core/render/pdf.ts` | ✅ done | `pdfkit` (pure JS); embedded images with pagination. |
+| `src/core/render/fit.ts` | ✅ done | Shared aspect-preserving fit (bounds width AND height). |
 
 ¹ The deterministic parts (prompt building, transcript/image layout, the frame tool wiring)
 are typed against the installed SDK and unit-tested. The live `generateText` call has **not**
@@ -33,11 +34,14 @@ its live validation.
 
 ## Remaining work
 
-1. `render/docx.ts`, then `render/pdf.ts` (the last two stubs).
-2. First live end-to-end run against a real public Loom (validates ingest + generation).
+All modules are implemented, unit-tested, and skeptic-reviewed. The only thing not yet
+exercised is the **first live end-to-end run**:
 
-The Markdown renderer already works, so once `generate` runs live, an end-to-end `.md` is
-produced before the other two renderers exist.
+1. Ingest + frames can be validated live with just a public Loom URL (no API key).
+2. The full run (generation) needs `ANTHROPIC_API_KEY` + a real Loom; the live `generateText`
+   call is verified against the SDK's types but not yet executed.
+
+Tune the frame thresholds and the `maxCandidates` cap against real Looms once run.
 
 ## Commands
 
