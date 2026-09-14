@@ -1,26 +1,50 @@
-import { NotImplementedError } from "../util/errors.js";
+import { readdir } from "node:fs/promises";
+import { join } from "node:path";
+import { runFfmpeg } from "../util/ffmpeg.js";
 
 /**
- * Frame sampling (PRD §4). Sample the video at a modest rate (default ~2 fps) so
- * downstream steps inspect a manageable number of frames rather than every frame.
+ * Frame sampling (PRD §4). Sample the video at a modest rate (default ~2 fps) into a
+ * scratch directory, so downstream steps inspect a manageable number of frames rather
+ * than every frame.
  */
 
 export interface SampledFrame {
-  /** Seconds into the video. */
+  /** Seconds into the video (approximate: sample index / fps). */
   timestamp: number;
   /** Path to the sampled image on disk. */
   path: string;
 }
 
-/**
- * Sample frames from a stream URL into `workDir` at `fps`.
- * Intended: `ffmpeg -i <stream> -vf fps=<fps> <workDir>/frame-%06d.png`, then map
- * frame indices back to timestamps.
- */
+const FRAME_RE = /^frame-(\d+)\.png$/;
+
+/** Sample frames from a stream URL into `workDir` at `fps`. */
 export async function sampleFrames(
-  _streamUrl: string,
-  _workDir: string,
-  _fps: number,
+  streamUrl: string,
+  workDir: string,
+  fps: number,
 ): Promise<SampledFrame[]> {
-  throw new NotImplementedError("frames/sample.sampleFrames");
+  const pattern = join(workDir, "frame-%06d.png");
+  await runFfmpeg([
+    "-nostdin",
+    "-loglevel",
+    "error",
+    "-y",
+    "-i",
+    streamUrl,
+    "-vf",
+    `fps=${fps}`,
+    pattern,
+  ]);
+
+  const entries = (await readdir(workDir))
+    .map((name) => ({ name, match: FRAME_RE.exec(name) }))
+    .filter((e): e is { name: string; match: RegExpExecArray } => e.match !== null)
+    // Sort by the numeric frame index, not lexically.
+    .sort((a, b) => Number(a.match[1]) - Number(b.match[1]));
+
+  // ffmpeg's fps filter emits frames spaced 1/fps apart, with index 1 near t=0.
+  return entries.map((e, idx) => ({
+    timestamp: idx / fps,
+    path: join(workDir, e.name),
+  }));
 }

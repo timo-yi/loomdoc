@@ -1,22 +1,33 @@
-import { NotImplementedError } from "../util/errors.js";
+import { runFfmpeg } from "../util/ffmpeg.js";
 
 /**
  * On-demand exact-timestamp frame extraction (PRD decision D7).
  *
- * Backs the LLM's `getFrameAtTimestamp` tool and the final "cut the chosen
- * screenshots" step. Uses a fast ffmpeg input seek, which fetches only the segment
- * around the timestamp — cheap even against a remote HLS stream:
- *   `ffmpeg -ss <ts> -i <stream> -frames:v 1 <out>.png`
- *
- * Because the source is always available for a targeted seek, no frame is ever
- * permanently lost by winnowing.
+ * Backs the LLM's `getFrameAtTimestamp` tool and the final "cut the chosen screenshots"
+ * step. Uses a fast input seek (`-ss` BEFORE `-i`), which fetches only the segment around
+ * the timestamp — cheap even against a remote HLS stream. Because the source is always
+ * available for a targeted seek, no frame is ever permanently lost by winnowing.
  */
-
-/** Extract a single frame at `timestampSeconds` into `outPath`. Returns outPath. */
 export async function extractFrameAt(
-  _streamUrl: string,
-  _timestampSeconds: number,
-  _outPath: string,
+  streamUrl: string,
+  timestampSeconds: number,
+  outPath: string,
 ): Promise<string> {
-  throw new NotImplementedError("frames/extract.extractFrameAt");
+  const ss = Math.max(0, timestampSeconds);
+  await runFfmpeg([
+    "-nostdin",
+    "-loglevel",
+    "error",
+    "-y",
+    "-ss",
+    ss.toString(),
+    "-i",
+    streamUrl,
+    "-frames:v",
+    "1",
+    "-q:v",
+    "2",
+    outPath,
+  ]);
+  return outPath;
 }

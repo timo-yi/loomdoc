@@ -1,23 +1,40 @@
-import { NotImplementedError } from "../util/errors.js";
+import sharp from "sharp";
 
 /**
- * Perceptual hashing (PRD decision D6).
+ * Perceptual hashing (PRD decision D6) — the dHash algorithm.
  *
- * Computes a compact hash of a frame's global gradient structure (dHash-style):
- * downscale to a tiny thumbnail, then encode gradient direction. Small local
- * details — most importantly a moving cursor — vanish at this resolution, so
- * cursor-only movement produces the SAME hash and collapses away. Large changes
- * (menus, navigation, selections) change the hash and are kept.
- *
- * Intended implementation uses `sharp` to read and downscale the image.
+ * Downscale the frame to a tiny 9x8 grayscale thumbnail and encode, for each row, whether
+ * each pixel is brighter than the one to its right (64 comparisons -> 64 bits). Small local
+ * details — most importantly a moving cursor — vanish at this resolution, so cursor-only
+ * movement yields the SAME hash and collapses away. Large changes (navigation, menus,
+ * selections) change the gradient structure and are kept.
  */
 
-/** A perceptual hash as a bit string (or bigint) suitable for Hamming comparison. */
+/** A 64-bit perceptual hash. */
 export type PerceptualHash = bigint;
 
-/** Compute the perceptual hash of an image file. */
-export async function perceptualHash(_imagePath: string): Promise<PerceptualHash> {
-  throw new NotImplementedError("frames/hash.perceptualHash");
+const HASH_WIDTH = 9; // one extra column so each row yields 8 horizontal comparisons
+const HASH_HEIGHT = 8;
+
+/** Compute the dHash of an image file. */
+export async function perceptualHash(imagePath: string): Promise<PerceptualHash> {
+  const data = await sharp(imagePath)
+    .greyscale()
+    .resize(HASH_WIDTH, HASH_HEIGHT, { fit: "fill" })
+    .raw()
+    .toBuffer();
+
+  let hash = 0n;
+  let bit = 0;
+  for (let row = 0; row < HASH_HEIGHT; row++) {
+    for (let col = 0; col < HASH_WIDTH - 1; col++) {
+      const left = data[row * HASH_WIDTH + col]!;
+      const right = data[row * HASH_WIDTH + col + 1]!;
+      if (left < right) hash |= 1n << BigInt(bit);
+      bit++;
+    }
+  }
+  return hash;
 }
 
 /** Number of differing bits between two hashes. Lower = more similar. */
