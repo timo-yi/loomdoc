@@ -18,14 +18,24 @@ export function renderMarkdown(doc: LoomDoc, imagesDirName = "images"): string {
     const shot = step.screenshot;
     if (shot?.path) {
       const rel = `${imagesDirName}/${basename(shot.path)}`;
-      const alt = shot.caption ?? step.heading;
+      const alt = escapeAlt(shot.caption ?? step.heading);
       lines.push(`![${alt}](${rel})`, "");
-      if (shot.caption) lines.push(`*${shot.caption}*`, "");
+      if (shot.caption) lines.push(`*${escapeInline(shot.caption)}*`, "");
     }
     if (step.body) lines.push(step.body, "");
   });
 
   return lines.join("\n").trimEnd() + "\n";
+}
+
+/** Escape characters that would break image alt text (`[` `]` `\`). */
+function escapeAlt(text: string): string {
+  return text.replace(/[\\[\]]/g, "\\$&");
+}
+
+/** Escape inline-emphasis characters so a caption can't break the surrounding `*...*`. */
+function escapeInline(text: string): string {
+  return text.replace(/[\\*_`[\]]/g, "\\$&");
 }
 
 /** Render and write the Markdown document. Returns the absolute file path. */

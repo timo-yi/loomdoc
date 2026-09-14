@@ -21,22 +21,48 @@ async function sampleDoc(dir: string): Promise<LoomDoc> {
     overview: "A short overview.",
     audience: "end users",
     steps: [
-      { heading: "Open the page", body: "Navigate to the dashboard.", screenshot: { timestamp: 1, path: shot, caption: "The dashboard" } },
+      { heading: "Open the page", body: "Navigate to the dashboard.", screenshot: { path: shot, caption: "The dashboard" } },
       { heading: "Click save", body: "Press the Save button." },
     ],
   };
+}
+
+async function tallImageDoc(dir: string): Promise<LoomDoc> {
+  const steps = [];
+  for (let i = 1; i <= 3; i++) {
+    const shot = join(dir, "images", `tall-${i}.png`);
+    await sharp({ create: { width: 400, height: 900, channels: 3, background: { r: 180, g: 190, b: 200 } } })
+      .png()
+      .toFile(shot);
+    steps.push({ heading: `Step ${i}`, body: "Body text.", screenshot: { path: shot } });
+  }
+  return { title: "Tall", overview: "", audience: "a", steps };
 }
 
 test("renderMarkdown includes headings, image reference, and caption", () => {
   const md = renderMarkdown({
     title: "T",
     overview: "O",
-    steps: [{ heading: "H1", body: "B1", screenshot: { timestamp: 1, path: "/x/images/step-01.png", caption: "C1" } }],
+    audience: "a",
+    steps: [{ heading: "H1", body: "B1", screenshot: { path: "/x/images/step-01.png", caption: "C1" } }],
   });
   assert.match(md, /# T/);
   assert.match(md, /## 1\. H1/);
   assert.match(md, /!\[C1\]\(images\/step-01\.png\)/);
   assert.match(md, /\*C1\*/);
+});
+
+test("renderMarkdown escapes caption chars that would break alt/emphasis", () => {
+  const md = renderMarkdown({
+    title: "T",
+    overview: "",
+    audience: "a",
+    steps: [{ heading: "H", body: "B", screenshot: { path: "/x/images/step-01.png", caption: "a ] b * c" } }],
+  });
+  // Alt text: the ] is escaped so the image link isn't broken.
+  assert.ok(md.includes("![a \\] b * c](images/step-01.png)"), md);
+  // Italic caption line: both ] and * are escaped so emphasis isn't broken.
+  assert.ok(md.includes("*a \\] b \\* c*"), md);
 });
 
 test("writeMarkdown writes a .md file", async () => {
@@ -85,6 +111,21 @@ test("writePdf produces a valid .pdf with content", async () => {
     assert.ok((await stat(out)).size > 0);
     // PDF magic number "%PDF".
     assert.equal(bytes.subarray(0, 4).toString("latin1"), "%PDF");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("writePdf paginates tall images onto multiple pages (no clipping)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "loomdoc-pdfpage-"));
+  try {
+    await (await import("node:fs/promises")).mkdir(join(dir, "images"), { recursive: true });
+    const doc = await tallImageDoc(dir);
+    const out = await writePdf(doc, dir);
+    const text = (await readFile(out)).toString("latin1");
+    // Count page objects ("/Type /Page" but not "/Type /Pages").
+    const pageCount = (text.match(/\/Type\s*\/Page(?![sA-Za-z])/g) ?? []).length;
+    assert.ok(pageCount >= 2, `three tall images should span multiple pages, got ${pageCount}`);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
