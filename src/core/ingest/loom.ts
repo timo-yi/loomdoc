@@ -151,9 +151,11 @@ async function fetchMetadata(id: string): Promise<Metadata> {
 // --- Stream URL ------------------------------------------------------------------------
 
 async function fetchStreamUrl(id: string): Promise<string> {
+  const statuses: number[] = [];
   for (const endpoint of ["transcoded-url", "raw-url"]) {
-    const url = await fetchSessionUrl(id, endpoint);
-    if (url) return assertHttpUrl(url, "stream");
+    const result = await fetchSessionUrl(id, endpoint);
+    if (result.url) return assertHttpUrl(result.url, "stream");
+    if (result.status !== null) statuses.push(result.status);
   }
 
   // Loom's REST media endpoints intermittently return empty/errors; the CDN GraphQL
@@ -161,13 +163,23 @@ async function fetchStreamUrl(id: string): Promise<string> {
   const cdnUrl = await fetchCdnUrl(id);
   if (cdnUrl) return assertHttpUrl(cdnUrl, "stream");
 
-  throw new LoomdocError(
-    `Could not resolve a video stream URL for ${id}. The video may be private, deleted, ` +
-      `or password-protected (v1 supports public/unlisted links only).`,
-  );
+  const seen = statuses.length > 0 ? ` (last HTTP status ${statuses[statuses.length - 1]})` : "";
+  // A 403/407 is ambiguous between a private video and the network blocking loom.com — say both,
+  // so a network/egress-policy block isn't misdiagnosed as a private video.
+  const hint =
+    statuses.includes(403) || statuses.includes(407)
+      ? "This is either a private/password-protected video (v1 supports public/unlisted only) or " +
+        "your network is blocking loom.com (proxy/egress policy)."
+      : "The video may be private, deleted, or password-protected (v1 supports public/unlisted only).";
+  throw new LoomdocError(`Could not resolve a video stream URL for ${id}${seen}. ${hint}`);
 }
 
-async function fetchSessionUrl(id: string, endpoint: string): Promise<string | null> {
+interface SessionUrlResult {
+  url: string | null;
+  status: number | null;
+}
+
+async function fetchSessionUrl(id: string, endpoint: string): Promise<SessionUrlResult> {
   const apiUrl = `https://www.loom.com/api/campaigns/sessions/${id}/${endpoint}`;
   let res: Response;
   try {
@@ -183,12 +195,12 @@ async function fetchSessionUrl(id: string, endpoint: string): Promise<string | n
     });
   } catch {
     // Transient error on this endpoint: let the caller try the next fallback rather than abort.
-    return null;
+    return { url: null, status: null };
   }
 
-  if (!res.ok) return null;
+  if (!res.ok) return { url: null, status: res.status };
   const json = (await res.json().catch(() => null)) as { url?: string } | null;
-  return json?.url ?? null;
+  return { url: json?.url ?? null, status: res.status };
 }
 
 async function fetchCdnUrl(id: string): Promise<string | null> {
