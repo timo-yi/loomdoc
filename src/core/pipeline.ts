@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
   DEFAULT_EFFORT,
@@ -52,39 +52,45 @@ export async function runLoomdoc(options: LoomdocOptions): Promise<LoomdocResult
   await mkdir(imagesDir, { recursive: true });
   await mkdir(workDir, { recursive: true });
 
-  // 2. Frame track (the only deterministic step): sample -> winnow to distinct screens.
-  const sampled = await sampleFrames(video.streamUrl, workDir, frames.sampleFps);
-  const candidates = await winnowFrames(sampled, frames.hammingThreshold);
+  // Steps 2-5 run against scratch frames; always clean them up afterward so the shared
+  // deliverable folder isn't polluted and disk isn't leaked.
+  try {
+    // 2. Frame track (the only deterministic step): sample -> winnow to distinct screens.
+    const sampled = await sampleFrames(video.streamUrl, workDir, frames.sampleFps);
+    const candidates = await winnowFrames(sampled, frames);
 
-  // 3. Generate: the vision LLM makes every judgment call and may request extra
-  //    exact-timestamp frames via the tool below (capped).
-  let frameRequests = 0;
-  const requestFrame = async (timestampSeconds: number): Promise<string> => {
-    if (frameRequests >= maxFrameRequests) {
-      throw new LoomdocError(`Exceeded maxFrameRequests (${maxFrameRequests}).`);
-    }
-    frameRequests += 1;
-    const out = join(imagesDir, `frame-${timestampSeconds.toFixed(2)}.png`);
-    return extractFrameAt(video.streamUrl, timestampSeconds, out);
-  };
+    // 3. Generate: the vision LLM makes every judgment call and may request extra
+    //    exact-timestamp frames via the tool below (capped).
+    let frameRequests = 0;
+    const requestFrame = async (timestampSeconds: number): Promise<string> => {
+      if (frameRequests >= maxFrameRequests) {
+        throw new LoomdocError(`Exceeded maxFrameRequests (${maxFrameRequests}).`);
+      }
+      frameRequests += 1;
+      const out = join(imagesDir, `frame-${timestampSeconds.toFixed(2)}.png`);
+      return extractFrameAt(video.streamUrl, timestampSeconds, out);
+    };
 
-  const output = await generateDoc({
-    video,
-    candidates,
-    context: options.context,
-    model,
-    effort,
-    maxFrameRequests,
-    requestFrame,
-  });
+    const output = await generateDoc({
+      video,
+      candidates,
+      context: options.context,
+      model,
+      effort,
+      maxFrameRequests,
+      requestFrame,
+    });
 
-  // 4. Resolve the model's chosen screenshot timestamps into extracted image files.
-  const doc = await materializeScreenshots(output, video.streamUrl, imagesDir);
+    // 4. Resolve the model's chosen screenshot timestamps into extracted image files.
+    const doc = await materializeScreenshots(output, video.streamUrl, imagesDir);
 
-  // 5. Render to each requested format off the one structured document.
-  const files = await renderAll(doc, outputDir, formats, IMAGES_DIR);
+    // 5. Render to each requested format off the one structured document.
+    const files = await renderAll(doc, outputDir, formats, IMAGES_DIR);
 
-  return { doc, outputDir, imagesDir, files };
+    return { doc, outputDir, imagesDir, files };
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
+  }
 }
 
 /**
@@ -102,8 +108,14 @@ async function materializeScreenshots(
     let screenshot: Screenshot | undefined;
     if (s.screenshot) {
       const out = join(imagesDir, `step-${String(i + 1).padStart(2, "0")}.png`);
-      const path = await extractFrameAt(streamUrl, s.screenshot.timestamp, out);
-      screenshot = { timestamp: s.screenshot.timestamp, path, caption: s.screenshot.caption };
+      try {
+        const path = await extractFrameAt(streamUrl, s.screenshot.timestamp, out);
+        screenshot = { timestamp: s.screenshot.timestamp, path, caption: s.screenshot.caption };
+      } catch {
+        // A single bad timestamp shouldn't sink the whole doc: keep the step's text and
+        // drop just its screenshot.
+        screenshot = undefined;
+      }
     }
     steps.push({
       heading: s.heading,

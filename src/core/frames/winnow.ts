@@ -1,14 +1,22 @@
-import { hammingDistance, perceptualHash, type PerceptualHash } from "./hash.js";
+import { changedFraction, computeSignature, type Signature } from "./signature.js";
 import type { SampledFrame } from "./sample.js";
+import type { FrameOptions } from "../types.js";
 
 /**
- * Winnowing (PRD §4, decision D6). Group consecutive near-identical sampled frames
- * (Hamming distance <= threshold from the group's anchor) into "screen states" and pick
- * one representative per state. This is the ONLY deterministic step and it has no notion
- * of meaning — it just removes near-duplicates (cursor jitter, scrolling, highlight flicker
- * that leaves the screen otherwise unchanged). Which surviving frames matter is the LLM's
- * call, so this stays deliberately conservative (recall-biased): every distinct screen
- * survives; duplicates collapse.
+ * Winnowing with a stability gate (PRD §4, decision D6). This is the ONLY deterministic
+ * step, and it has no notion of meaning — it decides which frames are worth showing the LLM.
+ *
+ * Two ideas:
+ *   1. Skip frames while the screen is IN MOTION (a scroll, an animation, a page load). A
+ *      frame is "moving" if it differs from the next frame by more than `motionThreshold`.
+ *      This avoids emitting blurry mid-transition frames.
+ *   2. Among settled frames, emit one representative each time the screen reaches a new
+ *      distinct state — i.e. it differs from the last emitted representative by at least
+ *      `sameScreenThreshold`. Cursor-only movement is below that floor, so it collapses;
+ *      a dropdown / selection / typed text is above it, so it survives.
+ *
+ * Deliberately recall-biased: it errs toward emitting an extra candidate rather than dropping
+ * a real step, because the vision LLM is the judge of what actually matters (PRD D5/D7).
  */
 
 export interface CandidateFrame {
@@ -16,40 +24,60 @@ export interface CandidateFrame {
   path: string;
 }
 
-/** Collapse a run of sampled frames into distinct representative frames. */
+const HASH_CONCURRENCY = 8;
+
 export async function winnowFrames(
   frames: SampledFrame[],
-  hammingThreshold: number,
+  options: FrameOptions,
 ): Promise<CandidateFrame[]> {
   if (frames.length === 0) return [];
 
-  const hashes: PerceptualHash[] = [];
-  for (const frame of frames) {
-    hashes.push(await perceptualHash(frame.path));
+  const signatures = await mapLimit(frames, HASH_CONCURRENCY, (f) => computeSignature(f.path));
+  const { pixelDelta, motionThreshold, sameScreenThreshold } = options;
+  const n = frames.length;
+
+  // moving[i]: the screen is actively changing between frame i and i+1. The last frame is
+  // settled by definition.
+  const moving: boolean[] = [];
+  for (let i = 0; i < n - 1; i++) {
+    moving.push(changedFraction(signatures[i]!, signatures[i + 1]!, pixelDelta) > motionThreshold);
   }
+  moving.push(false);
 
-  // Group consecutive frames by similarity to the group's anchor (the first frame of the
-  // group), which avoids slow drift merging genuinely different screens.
-  const groups: number[][] = [];
-  let group: number[] = [0];
-  let anchor = hashes[0]!;
+  // A frame is a settle point if it stays quiet through the dwell window.
+  const dwellFrames = Math.max(1, Math.round(options.dwellSeconds * options.sampleFps));
+  const isSettled = (i: number): boolean => {
+    for (let k = 0; k < dwellFrames && i + k < n; k++) {
+      if (moving[i + k]) return false;
+    }
+    return true;
+  };
 
-  for (let i = 1; i < frames.length; i++) {
-    if (hammingDistance(anchor, hashes[i]!) <= hammingThreshold) {
-      group.push(i);
-    } else {
-      groups.push(group);
-      group = [i];
-      anchor = hashes[i]!;
+  const candidates: CandidateFrame[] = [];
+  let lastSig: Signature | null = null;
+  for (let i = 0; i < n; i++) {
+    if (!isSettled(i)) continue;
+    const sig = signatures[i]!;
+    if (lastSig === null || changedFraction(sig, lastSig, pixelDelta) >= sameScreenThreshold) {
+      candidates.push({ timestamp: frames[i]!.timestamp, path: frames[i]!.path });
+      lastSig = sig;
     }
   }
-  groups.push(group);
+  return candidates;
+}
 
-  // Representative = the middle frame of each group: past the transition into the screen,
-  // and before the transition out — the most "settled" moment.
-  return groups.map((g) => {
-    const mid = g[Math.floor(g.length / 2)]!;
-    const frame = frames[mid]!;
-    return { timestamp: frame.timestamp, path: frame.path };
-  });
+/** Run `fn` over `items` with bounded concurrency, preserving order. */
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      results[i] = await fn(items[i]!);
+    }
+  };
+  const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
 }

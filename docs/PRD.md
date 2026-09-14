@@ -52,7 +52,7 @@ future readers understand *why*, not just *what*.
 | D3 | **TypeScript / Node core.** | Two stated futures — a Claude Code plugin and a **Vercel AI SDK tool** — both want JS/TS. A Python core would force an awkward subprocess/HTTP bridge to reach the Vercel AI SDK. TS also lets the LLM step *use* the Vercel AI SDK directly. `ffmpeg` is a shelled-out binary either way, so nothing is lost on the media side. Local Whisper (Python's one advantage) is unnecessary because Loom gives us the transcript. |
 | D4 | **Separable core library + thin CLI.** | Keeps every future distribution channel (Claude Code plugin, Vercel AI SDK tool, package, bot) a thin adapter over the same core — no rewrite. |
 | D5 | **Vision LLM does all judgment; deterministic code only produces signals and winnows.** | As models improve, we want to give them room to reason rather than constrain them with brittle heuristics. Code narrows the haystack; the model picks the needles. |
-| D6 | **The only deterministic step is visual de-duplication; it has no concept of "meaning."** | Trying to deterministically detect "meaningful" screen changes (scroll vs. real navigation, nervous highlight vs. intentional) is an endless edge-case spiral. We refuse it. Perceptual hashing collapses near-identical frames (including cursor-only movement, which vanishes at hash resolution); the LLM decides what matters. |
+| D6 | **The only deterministic step is visual de-duplication; it has no concept of "meaning."** | Trying to deterministically detect "meaningful" screen changes (scroll vs. real navigation, nervous highlight vs. intentional) is an endless edge-case spiral. We refuse it. A downscaled change-fraction metric collapses near-identical frames (cursor-only movement is sub-cell and vanishes) while keeping localized changes (dropdowns, selections, typed text); a stability gate skips in-motion frames. It is recall-biased — over-capture, and let the LLM decide what matters. *(An earlier 9×8 dHash sketch was replaced after review: it collapsed exactly the localized steps a how-to doc must capture.)* |
 | D7 | **Transcript is a first-class input to frame selection, via the LLM — not via keyword heuristics.** | The transcript is handed to the LLM whole. The LLM can call a `getFrameAtTimestamp(ts)` tool to pull any exact moment it judges important (e.g. "they typed the email at 2:03") — covering small changes the hash smooths over — without any code-side keyword matching. |
 | D8 | **Fixed step-granular output schema; renderers per format.** | One structured intermediate (ordered steps: heading + optional screenshot + body) renders to Markdown, Word, PDF today and PowerPoint later (a step = a doc section = a slide). The schema is the fixed container; the LLM owns the contents. |
 | D9 | **Output genre = step-by-step how-to, with a free-text style/context steer.** | Covers the walkthrough use case. Audience/tone adapt via optional context (role, industry, function, audience, use case, intent) or inference from the video. No rigid template menu (that fights LLM judgment and adds surface). |
@@ -69,7 +69,7 @@ Loom share URL
       │
       ├─ Transcript track ──────────────► full timestamped transcript (Loom GraphQL/SSR)
       │
-      └─ Video track (HLS) ─► sample frames ─► perceptual-hash grouping ─► settled representatives
+      └─ Video track (HLS) ─► sample frames ─► change-fraction + stability gate ─► settled reps
                                                (only deterministic step; no notion of meaning)
       │
       ▼
@@ -92,14 +92,16 @@ Loom share URL
 - **Frame track is non-destructive.** Winnowing chooses the *default* distinct screens; the
   full video remains available, so any exact-timestamp frame can be re-cut on demand. The order
   the two tracks finish in never costs a frame.
-- **Perceptual hash** (e.g. dHash, Hamming distance ≤ 8 as the "same screen" threshold): global
-  gradient structure of a downscaled thumbnail. A ~15px cursor disappears at that resolution, so
-  cursor-only movement collapses to one frame. Large cursor-*caused* changes (menus, tooltips,
-  selections) change the hash and are kept.
-- **Stability / settle gate**: prefer frames where the screen has been visually stable for a short
-  dwell, avoiding mid-transition blur.
-- Thresholds (sample rate, Hamming distance, dwell) are config with sane defaults, tuned against
-  a couple of real Looms.
+- **Change-fraction metric**: each frame is downscaled to a 64×64 grayscale signature; two
+  frames differ by the fraction of cells that change beyond a per-cell noise floor. A ~15px
+  cursor is sub-cell after downscale, so cursor-only movement collapses; a dropdown, selection,
+  or typed text changes enough cells to be kept. (This replaced an initial 9×8 dHash, which
+  review showed collapsed exactly those localized steps.)
+- **Stability / settle gate**: frames are skipped while the screen is *in motion* (consecutive
+  change above a motion threshold), so scrolls and animations don't yield blurry mid-transition
+  representatives; one representative is emitted per settled, distinct screen.
+- Thresholds (sample rate, per-cell delta, same-screen and motion fractions, dwell) are config
+  with sane defaults, to be tuned against a couple of real Looms.
 
 ---
 

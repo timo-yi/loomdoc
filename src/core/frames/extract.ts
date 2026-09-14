@@ -1,4 +1,6 @@
+import { stat } from "node:fs/promises";
 import { runFfmpeg } from "../util/ffmpeg.js";
+import { LoomdocError } from "../util/errors.js";
 
 /**
  * On-demand exact-timestamp frame extraction (PRD decision D7).
@@ -7,6 +9,10 @@ import { runFfmpeg } from "../util/ffmpeg.js";
  * step. Uses a fast input seek (`-ss` BEFORE `-i`), which fetches only the segment around
  * the timestamp — cheap even against a remote HLS stream. Because the source is always
  * available for a targeted seek, no frame is ever permanently lost by winnowing.
+ *
+ * Guards against a subtle ffmpeg behavior: seeking at/after the end of the stream exits 0
+ * while writing no file. We verify a non-empty file was produced and raise a clear error
+ * otherwise, so a bad timestamp never yields a doc with a silently missing screenshot.
  */
 export async function extractFrameAt(
   streamUrl: string,
@@ -29,5 +35,17 @@ export async function extractFrameAt(
     "2",
     outPath,
   ]);
+
+  let size = 0;
+  try {
+    size = (await stat(outPath)).size;
+  } catch {
+    size = 0;
+  }
+  if (size === 0) {
+    throw new LoomdocError(
+      `ffmpeg produced no frame at ${ss}s (likely past the end of the video).`,
+    );
+  }
   return outPath;
 }

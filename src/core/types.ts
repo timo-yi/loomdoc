@@ -55,13 +55,21 @@ export type OutputFormat = "markdown" | "docx" | "pdf";
 
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
-/** Tunables for the deterministic frame-winnowing step (PRD §4). */
+/**
+ * Tunables for the deterministic frame-winnowing step (PRD §4). All are thresholds on the
+ * fraction of a downscaled frame's cells that change; sensible defaults below, tune against
+ * real Looms.
+ */
 export interface FrameOptions {
   /** Frames per second to sample from the video. */
   sampleFps: number;
-  /** Perceptual-hash Hamming distance below which two frames are "the same screen". */
-  hammingThreshold: number;
-  /** Seconds the screen must be visually stable before a frame is a candidate. */
+  /** Per-cell intensity delta (0-255) below which a change counts as noise, not a change. */
+  pixelDelta: number;
+  /** Cell-change fraction above which two settled frames count as different screens. */
+  sameScreenThreshold: number;
+  /** Cell-change fraction between consecutive frames above which the screen is "in motion". */
+  motionThreshold: number;
+  /** Seconds a screen must stay quiet to count as a settled state. */
   dwellSeconds: number;
 }
 
@@ -97,8 +105,10 @@ export interface LoomdocResult {
 
 export const DEFAULT_FRAME_OPTIONS: FrameOptions = {
   sampleFps: 2,
-  hammingThreshold: 8,
-  dwellSeconds: 1,
+  pixelDelta: 24,
+  sameScreenThreshold: 0.004,
+  motionThreshold: 0.04,
+  dwellSeconds: 0.5,
 };
 
 export const DEFAULT_MODEL = "claude-sonnet-5";

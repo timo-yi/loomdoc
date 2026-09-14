@@ -4,18 +4,18 @@ import { runFfmpeg } from "../util/ffmpeg.js";
 
 /**
  * Frame sampling (PRD §4). Sample the video at a modest rate (default ~2 fps) into a
- * scratch directory, so downstream steps inspect a manageable number of frames rather
- * than every frame.
+ * scratch directory as JPEGs (small; these are throwaway inputs to the winnower, not the
+ * final screenshots), so downstream steps inspect a manageable number of frames.
  */
 
 export interface SampledFrame {
-  /** Seconds into the video (approximate: sample index / fps). */
+  /** Seconds into the video. */
   timestamp: number;
   /** Path to the sampled image on disk. */
   path: string;
 }
 
-const FRAME_RE = /^frame-(\d+)\.png$/;
+const FRAME_RE = /^frame-(\d+)\.jpg$/;
 
 /** Sample frames from a stream URL into `workDir` at `fps`. */
 export async function sampleFrames(
@@ -23,7 +23,7 @@ export async function sampleFrames(
   workDir: string,
   fps: number,
 ): Promise<SampledFrame[]> {
-  const pattern = join(workDir, "frame-%06d.png");
+  const pattern = join(workDir, "frame-%06d.jpg");
   await runFfmpeg([
     "-nostdin",
     "-loglevel",
@@ -33,6 +33,8 @@ export async function sampleFrames(
     streamUrl,
     "-vf",
     `fps=${fps}`,
+    "-q:v",
+    "3",
     pattern,
   ]);
 
@@ -42,9 +44,10 @@ export async function sampleFrames(
     // Sort by the numeric frame index, not lexically.
     .sort((a, b) => Number(a.match[1]) - Number(b.match[1]));
 
-  // ffmpeg's fps filter emits frames spaced 1/fps apart, with index 1 near t=0.
+  // ffmpeg's fps filter centers each output sample in the middle of its interval, so
+  // sample index `idx` corresponds to time (idx + 0.5) / fps, not idx / fps.
   return entries.map((e, idx) => ({
-    timestamp: idx / fps,
+    timestamp: (idx + 0.5) / fps,
     path: join(workDir, e.name),
   }));
 }

@@ -18,10 +18,10 @@ modules get implemented. See [`PRD.md`](PRD.md) for the design and rationale.
 | `src/core/pipeline.ts` | ✅ wired | Orchestrates all stages; throws at the first unimplemented stage. |
 | `src/cli.ts` | ✅ wired | Thin CLI over the core (arg parsing + output paths). |
 | `src/index.ts` | ✅ done | Public library API. |
-| `src/core/frames/sample.ts` | ✅ done | ffmpeg frame sampling at N fps. |
-| `src/core/frames/hash.ts` | ✅ done | dHash via `sharp` + `hammingDistance`. |
-| `src/core/frames/winnow.ts` | ✅ done | Group by hash → middle-of-group representative. |
-| `src/core/frames/extract.ts` | ✅ done | Fast ffmpeg input-seek for one frame. |
+| `src/core/frames/sample.ts` | ✅ done | ffmpeg fps sampling to JPEG scratch; (idx+0.5)/fps timestamps. |
+| `src/core/frames/signature.ts` | ✅ done | 64×64 grayscale signature + `changedFraction` metric. |
+| `src/core/frames/winnow.ts` | ✅ done | Stability gate: skip motion, emit one rep per settled distinct screen. |
+| `src/core/frames/extract.ts` | ✅ done | Fast ffmpeg input-seek; verifies a non-empty frame was written. |
 | `src/core/generate/generate.ts` | 🚧 stub | Agentic vision LLM + `getFrameAtTimestamp` tool. |
 | `src/core/render/docx.ts` | 🚧 stub | `docx` package, embedded images. |
 | `src/core/render/pdf.ts` | 🚧 stub | Approach still an open item (PRD §10). |
