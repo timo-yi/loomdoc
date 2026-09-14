@@ -54,3 +54,66 @@ line two`;
 test("returns empty array for header-only input", () => {
   assert.deepEqual(parseVtt("WEBVTT\n"), []);
 });
+
+// --- Regression tests for skeptic findings ---------------------------------------------
+
+test("a whitespace-only separator line does NOT merge cues (skeptic M1)", () => {
+  // The 'blank' line between the two cues contains spaces.
+  const vtt = ["00:00:01.000 --> 00:00:02.000", "Hello", "   ", "00:00:03.000 --> 00:00:04.000", "World"].join("\n");
+  const cues = parseVtt(vtt);
+  assert.equal(cues.length, 2);
+  assert.deepEqual(cues[0], { start: 1, end: 2, text: "Hello" });
+  assert.deepEqual(cues[1], { start: 3, end: 4, text: "World" });
+});
+
+test("cue settings on the timing line do not leak into time or text", () => {
+  const vtt = `WEBVTT
+
+00:00:01.000 --> 00:00:02.000 align:start position:0%
+Body`;
+  const cues = parseVtt(vtt);
+  assert.equal(cues.length, 1);
+  assert.equal(cues[0]?.start, 1);
+  assert.equal(cues[0]?.end, 2);
+  assert.equal(cues[0]?.text, "Body");
+});
+
+test("handles CRLF line endings", () => {
+  const vtt = "WEBVTT\r\n\r\n00:00:01.000 --> 00:00:02.000\r\nHi\r\n";
+  const cues = parseVtt(vtt);
+  assert.equal(cues.length, 1);
+  assert.equal(cues[0]?.text, "Hi");
+});
+
+test("decodes standard character references", () => {
+  const vtt = `WEBVTT
+
+00:00:01.000 --> 00:00:02.000
+Tom &amp; Jerry cost &lt; $5 &gt; nothing`;
+  const cues = parseVtt(vtt);
+  assert.equal(cues[0]?.text, "Tom & Jerry cost < $5 > nothing");
+});
+
+test("keeps cues with hours >= 100", () => {
+  const vtt = `WEBVTT
+
+100:00:01.000 --> 100:00:02.000
+Long`;
+  const cues = parseVtt(vtt);
+  assert.equal(cues.length, 1);
+  assert.equal(cues[0]?.start, 360001);
+  assert.equal(cues[0]?.text, "Long");
+});
+
+test("skips STYLE blocks before real cues", () => {
+  const vtt = `WEBVTT
+
+STYLE
+::cue { color: yellow }
+
+00:00:01.000 --> 00:00:02.000
+Styled`;
+  const cues = parseVtt(vtt);
+  assert.equal(cues.length, 1);
+  assert.equal(cues[0]?.text, "Styled");
+});

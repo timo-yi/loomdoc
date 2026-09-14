@@ -12,10 +12,12 @@ modules get implemented. See [`PRD.md`](PRD.md) for the design and rationale.
 | `src/core/util/ffmpeg.ts` | ✅ done | `ffmpeg` shell-out + availability check. |
 | `src/core/util/slug.ts` | ✅ done | Output-folder slug. |
 | `src/core/util/errors.ts` | ✅ done | Error types. |
+| `src/core/util/vtt.ts` | ✅ done | Line-driven WebVTT parser (entity decode, robust separators). |
+| `src/core/util/transcript-json.ts` | ✅ done | Tolerant JSON-transcript parser (json-subs-only fallback). |
+| `src/core/ingest/loom.ts` | ✅ done | GraphQL + REST + CDN-fallback ingest; reviewed by skeptics and hardened. |
 | `src/core/pipeline.ts` | ✅ wired | Orchestrates all stages; throws at the first unimplemented stage. |
 | `src/cli.ts` | ✅ wired | Thin CLI over the core (arg parsing + output paths). |
 | `src/index.ts` | ✅ done | Public library API. |
-| `src/core/ingest/loom.ts` | 🚧 stub | Loom GraphQL/SSR fetch: transcript + stream URL. |
 | `src/core/frames/sample.ts` | 🚧 stub | ffmpeg frame sampling. |
 | `src/core/frames/hash.ts` | 🚧 partial | `hammingDistance` done; `perceptualHash` (via `sharp`) stubbed. |
 | `src/core/frames/winnow.ts` | 🚧 stub | Group by hash → settled representatives. |
