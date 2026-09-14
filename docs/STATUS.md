@@ -22,20 +22,22 @@ modules get implemented. See [`PRD.md`](PRD.md) for the design and rationale.
 | `src/core/frames/signature.ts` | ✅ done | 64×64 grayscale signature + `changedFraction` metric. |
 | `src/core/frames/winnow.ts` | ✅ done | Stability gate: skip motion, emit one rep per settled distinct screen. |
 | `src/core/frames/extract.ts` | ✅ done | Fast ffmpeg input-seek; verifies a non-empty frame was written. |
-| `src/core/generate/generate.ts` | 🚧 stub | Agentic vision LLM + `getFrameAtTimestamp` tool. |
+| `src/core/generate/generate.ts` | ✅ done¹ | Agentic vision LLM (Vercel AI SDK) + `getFrameAtTimestamp` tool returning the frame as an image. |
 | `src/core/render/docx.ts` | 🚧 stub | `docx` package, embedded images. |
 | `src/core/render/pdf.ts` | 🚧 stub | Approach still an open item (PRD §10). |
 
-## Suggested implementation order
+¹ The deterministic parts (prompt building, transcript/image layout, the frame tool wiring)
+are typed against the installed SDK and unit-tested. The live `generateText` call has **not**
+been executed end-to-end yet — it needs `ANTHROPIC_API_KEY` and a real Loom. First real run is
+its live validation.
 
-1. `ingest/loom.ts` — get a real transcript + stream URL from a share link (unblocks everything).
-2. `frames/extract.ts` — single-frame seek (also backs the model's frame tool).
-3. `frames/sample.ts` + `hash.ts` + `winnow.ts` — the winnowing track.
-4. `generate/generate.ts` — the agentic doc generation (the core value).
-5. `render/docx.ts`, then `render/pdf.ts`.
+## Remaining work
 
-The Markdown renderer already works, so an end-to-end run producing a `.md` is reachable
-after steps 1–4, before the other two renderers exist.
+1. `render/docx.ts`, then `render/pdf.ts` (the last two stubs).
+2. First live end-to-end run against a real public Loom (validates ingest + generation).
+
+The Markdown renderer already works, so once `generate` runs live, an end-to-end `.md` is
+produced before the other two renderers exist.
 
 ## Commands
 
