@@ -1,0 +1,50 @@
+{
+  "name": "loomdoc",
+  "version": "0.1.0",
+  "description": "Lightweight CLI that turns a Loom walkthrough into a screenshot-rich, audience-tailored how-to doc (Markdown / Word / PDF).",
+  "type": "module",
+  "license": "MIT",
+  "author": "Timo Yi",
+  "bin": {
+    "loomdoc": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/cli.js"
+  },
+  "keywords": [
+    "loom",
+    "documentation",
+    "cli",
+    "screenshots",
+    "how-to"
+  ],
+  "devDependencies": {
+    "@types/node": "^26.5.1",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.53",
+    "ai": "^7.0.99",
+    "docx": "^9.7.1",
+    "sharp": "^0.35.4",
+    "zod": "^4.6.5"
+  }
+}
