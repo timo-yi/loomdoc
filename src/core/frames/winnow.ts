@@ -53,17 +53,47 @@ export async function winnowFrames(
     return true;
   };
 
-  const candidates: CandidateFrame[] = [];
+  const keptIndices: number[] = [];
   let lastSig: Signature | null = null;
   for (let i = 0; i < n; i++) {
     if (!isSettled(i)) continue;
     const sig = signatures[i]!;
     if (lastSig === null || changedFraction(sig, lastSig, pixelDelta) >= sameScreenThreshold) {
-      candidates.push({ timestamp: frames[i]!.timestamp, path: frames[i]!.path });
+      keptIndices.push(i);
       lastSig = sig;
     }
   }
-  return candidates;
+
+  const capped = capCandidates(keptIndices, signatures, pixelDelta, options.maxCandidates);
+  return capped.map((i) => ({ timestamp: frames[i]!.timestamp, path: frames[i]!.path }));
+}
+
+/**
+ * Enforce the candidate cap (the cost lever, PRD §6) by repeatedly dropping the least-distinct
+ * screen — the one most similar to its predecessor — so the surviving set stays maximally
+ * distinct. The first frame is always kept.
+ */
+function capCandidates(
+  indices: number[],
+  signatures: Signature[],
+  pixelDelta: number,
+  maxCandidates: number,
+): number[] {
+  if (maxCandidates <= 0 || indices.length <= maxCandidates) return indices;
+  const kept = [...indices];
+  while (kept.length > maxCandidates) {
+    let minPos = 1;
+    let minVal = Infinity;
+    for (let p = 1; p < kept.length; p++) {
+      const d = changedFraction(signatures[kept[p]!]!, signatures[kept[p - 1]!]!, pixelDelta);
+      if (d < minVal) {
+        minVal = d;
+        minPos = p;
+      }
+    }
+    kept.splice(minPos, 1);
+  }
+  return kept;
 }
 
 /** Run `fn` over `items` with bounded concurrency, preserving order. */

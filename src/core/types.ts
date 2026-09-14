@@ -7,11 +7,9 @@
  * paths afterward.
  */
 
-/** A screenshot pulled from the video at a specific point in time. */
+/** A screenshot embedded in the document. */
 export interface Screenshot {
-  /** Seconds into the video. */
-  timestamp: number;
-  /** Path to the extracted image file on disk (set by the pipeline, not the LLM). */
+  /** Path to the image file on disk (a frame the model actually saw, copied into images/). */
   path: string;
   /** Model-authored caption. */
   caption?: string;
@@ -71,6 +69,8 @@ export interface FrameOptions {
   motionThreshold: number;
   /** Seconds a screen must stay quiet to count as a settled state. */
   dwellSeconds: number;
+  /** Hard cap on candidate screenshots shown to the LLM (the cost lever); least-distinct dropped. */
+  maxCandidates: number;
 }
 
 /** Everything a single run needs. */
@@ -109,6 +109,7 @@ export const DEFAULT_FRAME_OPTIONS: FrameOptions = {
   sameScreenThreshold: 0.004,
   motionThreshold: 0.04,
   dwellSeconds: 0.5,
+  maxCandidates: 30,
 };
 
 export const DEFAULT_MODEL = "claude-sonnet-5";

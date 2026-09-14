@@ -22,7 +22,7 @@ modules get implemented. See [`PRD.md`](PRD.md) for the design and rationale.
 | `src/core/frames/signature.ts` | ✅ done | 64×64 grayscale signature + `changedFraction` metric. |
 | `src/core/frames/winnow.ts` | ✅ done | Stability gate: skip motion, emit one rep per settled distinct screen. |
 | `src/core/frames/extract.ts` | ✅ done | Fast ffmpeg input-seek; verifies a non-empty frame was written. |
-| `src/core/generate/generate.ts` | ✅ done¹ | Agentic vision LLM (Vercel AI SDK) + `getFrameAtTimestamp` tool returning the frame as an image. |
+| `src/core/generate/generate.ts` | ✅ done¹ | Agentic vision LLM (Vercel AI SDK); id-referenced frames, guarded output, capped candidates; reviewed by skeptics and reworked. |
 | `src/core/render/docx.ts` | ✅ done | `docx` package; embedded, scaled images. |
 | `src/core/render/pdf.ts` | ✅ done | `pdfkit` (pure JS); embedded images. |
 

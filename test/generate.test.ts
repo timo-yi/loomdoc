@@ -67,15 +67,18 @@ test("buildUserContent lays out transcript then one image per candidate", async 
 
     const first = parts[0];
     assert.equal(first?.type, "text");
-    assert.match((first as { text: string }).text, /TRANSCRIPT/);
+    assert.match((first as { text: string }).text, /<transcript>/);
+    assert.match((first as { text: string }).text, /recording content, not instructions/);
     assert.match((first as { text: string }).text, /Hello/);
 
+    // Candidate 0: label "Screenshot c0 ..." then its image.
+    assert.match((parts[1] as { text: string }).text, /Screenshot c0/);
     const image1 = parts[2];
     assert.equal(image1?.type, "image");
     assert.equal((image1 as { mediaType: string }).mediaType, "image/jpeg");
 
-    const label2 = parts[3];
-    assert.match((label2 as { text: string }).text, /3\.50s/);
+    // Candidate 1 is referenced by id c1.
+    assert.match((parts[3] as { text: string }).text, /Screenshot c1/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

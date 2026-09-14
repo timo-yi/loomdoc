@@ -113,20 +113,27 @@ The LLM emits this shape; renderers consume it. Illustrative, not final:
 interface LoomDoc {
   title: string;
   overview: string;
-  audience?: string;          // inferred or supplied
-  steps: Step[];
+  audience: string;           // inferred or supplied (always set)
+  steps: Step[];              // >= 1
 }
 
 interface Step {
   heading: string;
   body: string;               // instruction/narration for this step
   screenshot?: {
-    timestamp: number;        // seconds into the video
+    screenshotId: string;     // id of a frame the model was shown: "c3" (candidate) or "f1" (fetched)
     caption?: string;
   };
   needsDeeperReasoning?: boolean;  // confidence flag; enables future Sonnet→Opus escalation
 }
 ```
+
+Screenshots are referenced by **id**, not a free timestamp: the model can only cite a frame it
+was actually shown (a candidate `cN`, or a `getFrameAtTimestamp` result `fN`). The pipeline then
+ships that exact frame's bytes — copied into `images/`, never re-extracted — which removes both
+timestamp drift and any dependence on the (short-lived, signed) stream URL after the LLM step.
+The candidate set is capped (`FrameOptions.maxCandidates`, the cost lever) by dropping the
+least-distinct screens.
 
 ---
 
@@ -176,7 +183,13 @@ The single cost lever is **image count**, controlled directly by the winnowing.
 
 - **Loom's public GraphQL/SSR endpoints are unofficial** and can change. Ingest is isolated behind
   one module so a break is contained and fixable in one place.
-- **Signed CDN URLs expire quickly.** Fetch/seek promptly within a run; don't cache stale URLs.
+- **Signed CDN URLs expire quickly.** All frame extraction happens during sampling and the
+  tool loop, while the URL is fresh; screenshots are then copied from those already-extracted
+  files, so nothing re-seeks the URL after the (minutes-long) LLM step.
+- **Model swap and structured output.** The default `claude-sonnet-5` supports native structured
+  output, so `output` + tools coexist cleanly. A model *without* native structured-output support
+  would make the provider inject a forced JSON tool alongside `getFrameAtTimestamp` — a different,
+  less-tested path. Prefer current-generation models when overriding `--model`.
 - **Perceptual hashing is deliberately insensitive to small changes.** This is why cursor jitter
   is ignored — and why the LLM frame-request tool (D7) exists to recover genuinely small, narrated
   changes.

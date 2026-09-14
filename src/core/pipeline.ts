@@ -1,5 +1,5 @@
-import { mkdir, rm } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { copyFile, mkdir, rm } from "node:fs/promises";
+import { extname, join, resolve } from "node:path";
 import {
   DEFAULT_EFFORT,
   DEFAULT_FORMATS,
@@ -60,18 +60,20 @@ export async function runLoomdoc(options: LoomdocOptions): Promise<LoomdocResult
     const candidates = await winnowFrames(sampled, frames);
 
     // 3. Generate: the vision LLM makes every judgment call and may request extra
-    //    exact-timestamp frames via the tool below (capped).
+    //    exact-timestamp frames via the tool below (capped). Tool-fetched frames go to the
+    //    scratch dir (extracted while the signed URL is still fresh); the model references all
+    //    frames by id.
     let frameRequests = 0;
     const requestFrame = async (timestampSeconds: number): Promise<string> => {
       if (frameRequests >= maxFrameRequests) {
         throw new LoomdocError(`Exceeded maxFrameRequests (${maxFrameRequests}).`);
       }
       frameRequests += 1;
-      const out = join(imagesDir, `frame-${timestampSeconds.toFixed(2)}.png`);
+      const out = join(workDir, `fetched-${timestampSeconds.toFixed(2)}.png`);
       return extractFrameAt(video.streamUrl, timestampSeconds, out);
     };
 
-    const output = await generateDoc({
+    const { doc: output, frames: frameFiles } = await generateDoc({
       video,
       candidates,
       context: options.context,
@@ -81,8 +83,9 @@ export async function runLoomdoc(options: LoomdocOptions): Promise<LoomdocResult
       requestFrame,
     });
 
-    // 4. Resolve the model's chosen screenshot timestamps into extracted image files.
-    const doc = await materializeScreenshots(output, video.streamUrl, imagesDir);
+    // 4. Materialize screenshots by COPYING the exact frames the model saw (by id) into the
+    //    deliverable — no re-extraction, no dependence on the possibly-expired stream URL.
+    const doc = await materializeScreenshots(output, frameFiles, imagesDir);
 
     // 5. Render to each requested format off the one structured document.
     const files = await renderAll(doc, outputDir, formats, IMAGES_DIR);
@@ -94,27 +97,28 @@ export async function runLoomdoc(options: LoomdocOptions): Promise<LoomdocResult
 }
 
 /**
- * Convert the model's output (which references screenshots by timestamp) into the
- * domain document (which references extracted image files on disk).
+ * Convert the model's output (which references screenshots by id) into the domain document.
+ * Each referenced frame is COPIED (not re-extracted) into images/ as step-NN.<ext>, so the doc
+ * ships the exact bytes the model reasoned over. An unknown id just drops that screenshot.
  */
 async function materializeScreenshots(
   output: LoomDocOutput,
-  streamUrl: string,
+  frameFiles: Map<string, string>,
   imagesDir: string,
 ): Promise<LoomDoc> {
   const steps: Step[] = [];
   for (let i = 0; i < output.steps.length; i++) {
     const s = output.steps[i]!;
     let screenshot: Screenshot | undefined;
-    if (s.screenshot) {
-      const out = join(imagesDir, `step-${String(i + 1).padStart(2, "0")}.png`);
+    const source = s.screenshot ? frameFiles.get(s.screenshot.screenshotId) : undefined;
+    if (s.screenshot && source) {
+      const ext = extname(source) || ".png";
+      const dest = join(imagesDir, `step-${String(i + 1).padStart(2, "0")}${ext}`);
       try {
-        const path = await extractFrameAt(streamUrl, s.screenshot.timestamp, out);
-        screenshot = { timestamp: s.screenshot.timestamp, path, caption: s.screenshot.caption };
+        await copyFile(source, dest);
+        screenshot = { path: dest, caption: s.screenshot.caption };
       } catch {
-        // A single bad timestamp shouldn't sink the whole doc: keep the step's text and
-        // drop just its screenshot.
-        screenshot = undefined;
+        screenshot = undefined; // unreadable source: keep the step text, drop the image
       }
     }
     steps.push({

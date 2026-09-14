@@ -199,6 +199,32 @@ test("winnow skips mid-scroll frames and keeps the settled screens", async () =>
   }
 });
 
+test("winnow enforces the candidate cap, keeping the first and the most distinct", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "loomdoc-cap-"));
+  try {
+    const p = await makeFixtures(dir);
+    // Four settled distinct screens (base, denseA, denseB, denseC), each held for two frames.
+    const seq = frames(
+      [0, p.base],
+      [0.5, p.base],
+      [1, p.denseA],
+      [1.5, p.denseA],
+      [2, p.denseB],
+      [2.5, p.denseB],
+      [3, p.denseC],
+      [3.5, p.denseC],
+    );
+    const uncapped = await winnowFrames(seq, OPTS);
+    assert.equal(uncapped.length, 4);
+
+    const capped = await winnowFrames(seq, { ...OPTS, maxCandidates: 2 });
+    assert.equal(capped.length, 2);
+    assert.equal(capped[0]?.timestamp, 0, "the first screen is always kept");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("winnow edge cases: empty and single frame", async () => {
   const dir = await mkdtemp(join(tmpdir(), "loomdoc-w5-"));
   try {
