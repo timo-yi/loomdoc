@@ -23,8 +23,8 @@ modules get implemented. See [`PRD.md`](PRD.md) for the design and rationale.
 | `src/core/frames/winnow.ts` | ✅ done | Stability gate: skip motion, emit one rep per settled distinct screen. |
 | `src/core/frames/extract.ts` | ✅ done | Fast ffmpeg input-seek; verifies a non-empty frame was written. |
 | `src/core/generate/generate.ts` | ✅ done¹ | Agentic vision LLM (Vercel AI SDK) + `getFrameAtTimestamp` tool returning the frame as an image. |
-| `src/core/render/docx.ts` | 🚧 stub | `docx` package, embedded images. |
-| `src/core/render/pdf.ts` | 🚧 stub | Approach still an open item (PRD §10). |
+| `src/core/render/docx.ts` | ✅ done | `docx` package; embedded, scaled images. |
+| `src/core/render/pdf.ts` | ✅ done | `pdfkit` (pure JS); embedded images. |
 
 ¹ The deterministic parts (prompt building, transcript/image layout, the frame tool wiring)
 are typed against the installed SDK and unit-tested. The live `generateText` call has **not**
