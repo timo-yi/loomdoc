@@ -32,16 +32,17 @@ are typed against the installed SDK and unit-tested. The live `generateText` cal
 been executed end-to-end yet — it needs `ANTHROPIC_API_KEY` and a real Loom. First real run is
 its live validation.
 
-## Remaining work
+## v1 status: shipped and validated
 
-All modules are implemented, unit-tested, and skeptic-reviewed. The only thing not yet
-exercised is the **first live end-to-end run**:
+All modules are implemented, unit-tested, and skeptic-reviewed (55 tests). v1 has been run
+**live, end to end**, against a real public Loom: ingest → frame winnowing → agentic
+generation → Markdown/Word/PDF all worked, and a transcript fidelity check found the output
+faithful (no fabrication, sensible screenshot selection, correct step structure). See the
+README for the local walkthrough.
 
-1. Ingest + frames can be validated live with just a public Loom URL (no API key).
-2. The full run (generation) needs `ANTHROPIC_API_KEY` + a real Loom; the live `generateText`
-   call is verified against the SDK's types but not yet executed.
-
-Tune the frame thresholds and the `maxCandidates` cap against real Looms once run.
+Follow-ups (not blockers): tune the frame thresholds and the `maxCandidates` cap against more
+Looms, and the deferred items in PRD §8 (Google Docs, PPTX, batch, private-Loom auth,
+Sonnet→Opus escalation, Vercel AI SDK / Claude Code plugin packaging).
 
 ## Commands
 
