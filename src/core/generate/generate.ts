@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
-import { generateText, stepCountIs, tool, Output, type ImagePart, type TextPart } from "ai";
+import { generateText, stepCountIs, tool, Output, type FilePart, type TextPart } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import { loomDocSchema, type LoomDocOutput } from "./schema.js";
@@ -140,9 +140,9 @@ export function buildSystemPrompt(context?: DocContext): string {
 export async function buildUserContent(
   video: LoomVideo,
   candidates: CandidateFrame[],
-): Promise<Array<TextPart | ImagePart>> {
+): Promise<Array<TextPart | FilePart>> {
   const transcript = video.transcript.map((c) => `[${formatTs(c.start)}] ${c.text}`).join("\n");
-  const parts: Array<TextPart | ImagePart> = [
+  const parts: Array<TextPart | FilePart> = [
     {
       type: "text",
       text:
@@ -159,7 +159,7 @@ export async function buildUserContent(
     const candidate = candidates[i]!;
     const data = await readFile(candidate.path);
     parts.push({ type: "text", text: `Screenshot ${candidateId(i)} at ${formatTs(candidate.timestamp)}:` });
-    parts.push({ type: "image", image: data, mediaType: mediaTypeFor(candidate.path) });
+    parts.push({ type: "file", data, mediaType: mediaTypeFor(candidate.path) });
   }
   return parts;
 }
