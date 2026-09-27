@@ -236,3 +236,22 @@ function missing(host: HostInfo, tool: ManagedTool, title: string, manual: strin
 function outdated(host: HostInfo, tool: ManagedTool, title: string, prompt: string, manual: string): CheckResult {
   return { ok: false, finding: { severity: "warning", title, manual, fix: managedFix(host, tool, prompt) } };
 }
+
+/**
+ * Run checks without offering fixes, returning one message per blocking problem. Used where
+ * nothing may be installed (the web UI); each message says how to fix it from a terminal.
+ */
+export async function blockingProblems(requirements: Requirement[]): Promise<string[]> {
+  const problems: string[] = [];
+  for (const requirement of requirements) {
+    const result = await requirement.check();
+    if (result.ok || result.finding.severity !== "error") continue;
+    const { finding } = result;
+    problems.push(
+      finding.fix
+        ? `${finding.title} Run \`loomdoc doctor\` in a terminal to install it.`
+        : `${finding.title} ${finding.manual}`,
+    );
+  }
+  return problems;
+}

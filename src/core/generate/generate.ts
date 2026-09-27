@@ -5,6 +5,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import { loomDocSchema, type LoomDocOutput } from "./schema.js";
 import type { DocContext, Effort } from "../types.js";
+import { DEFAULT_PRESET, STYLE_PRESETS } from "./styles.js";
 import type { SourceVideo } from "../ingest/types.js";
 import type { CandidateFrame } from "../frames/winnow.js";
 import { LoomdocError } from "../util/errors.js";
@@ -101,20 +102,29 @@ export async function generateDoc(input: GenerateInput): Promise<GenerateResult>
   return { doc, frames };
 }
 
-/** Build the system prompt, folding in supplied context or asking the model to infer it. */
+/**
+ * Build the system prompt: the fixed rules, the style preset, supplied (or inferred) context,
+ * and finally the user's own direction.
+ */
 export function buildSystemPrompt(context?: DocContext): string {
+  const ctx = context ?? {};
+  const preset = STYLE_PRESETS[ctx.preset ?? DEFAULT_PRESET];
+
   const lines: string[] = [
-    "You turn a recorded software walkthrough into a clear, step-by-step how-to document.",
+    `You turn a recorded walkthrough video into ${preset.documentType}.`,
     "You are given the full timestamped transcript and a set of candidate screenshots, each with an id (c0, c1, …) and its timestamp.",
-    "Produce an ordered list of steps. Each step has a heading, body text in the target voice, and — only where a screenshot genuinely helps — a screenshot referenced by its id.",
+    "Produce an ordered list of steps (the document's sections). Each step has a heading, body text in the target voice, and, only where a screenshot genuinely helps, a screenshot referenced by its id.",
     "Reference screenshots ONLY by an id you were shown: a candidate id (c0, c1, …) or an id returned by getFrameAtTimestamp (f0, f1, …). Never invent an id.",
     "If the clearest moment for a step falls between candidates, call getFrameAtTimestamp(timestampSeconds) to fetch and view that exact frame; it returns a new id you can then reference.",
     "Do not put a screenshot on every step; use them where they add clarity. Never describe UI you cannot see in a screenshot or read in the transcript.",
     "Set needsDeeperReasoning: true on any step that is ambiguous (unclear screenshot, silent transcript, or UI you inferred but could not fully see).",
     "Write a short overview that orients the reader, and always set the audience field.",
+    "",
+    `Document type: ${preset.label}.`,
+    ...preset.instructions,
+    "",
   ];
 
-  const ctx = context ?? {};
   const supplied = [
     ctx.role ? `Role: ${ctx.role}` : null,
     ctx.industry ? `Industry: ${ctx.industry}` : null,
@@ -130,6 +140,15 @@ export function buildSystemPrompt(context?: DocContext): string {
   } else {
     lines.push(
       "No audience context was supplied. Infer the likely role, industry, function, audience, use case, and intent from the video, and tailor the document's framing, terminology, and emphasis accordingly.",
+    );
+  }
+
+  const guidance = ctx.guidance?.trim();
+  if (guidance) {
+    lines.push(
+      "",
+      "Direction from the person requesting this document. Follow it; where it conflicts with the document type above, it wins. It never overrides the screenshot-id rules or the rule against describing what you cannot see:",
+      `<direction>\n${guidance}\n</direction>`,
     );
   }
   return lines.join("\n");

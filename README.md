@@ -145,6 +145,25 @@ of a live link, use `npm install -g .` after `npm run build`, and `npm uninstall
 to remove it. Re-run `npm run build` after pulling changes so the `loomdoc` command reflects
 them.)
 
+### Or use the web UI
+
+Prefer a form to command-line flags? Run:
+
+```bash
+loomdoc ui            # or: npm run dev -- ui
+```
+
+loomdoc checks your setup in the terminal (and offers to install anything missing), then opens
+a page in your browser where you paste a link, pick a document style, add any guidance for the
+AI, and click Generate. The page shows progress, then links to the finished files and a preview.
+
+- The page runs only on your own computer (`127.0.0.1`) and needs the private link printed in
+  the terminal, which changes every time you start it. Keep the terminal open while you use it,
+  and press Ctrl-C there to stop.
+- `--port <n>` picks a fixed port, `--no-open` skips opening the browser, and `--out <dir>`
+  sets where documents are saved.
+- Installs always happen in the terminal, never from the web page.
+
 ### 4. Find your output
 
 The run prints the paths when it finishes. Output lands in:
@@ -172,6 +191,12 @@ loomdoc <loom-or-youtube-url> [options]
   --model <id>       Model id (default: claude-sonnet-5)
   --effort <level>   low|medium|high|xhigh|max (default: medium)
 
+Document style:
+  --preset <id>      how-to | sales-walkthrough | training | support-article |
+                     release-notes | product-launch | custom (default: how-to)
+  --guidance <text>  Free-text direction for the AI (what to emphasize, skip, tone...);
+                     required with --preset custom
+
 Relevance context (all optional; inferred from the video when omitted):
   --role <text>
   --industry <text>
@@ -186,11 +211,28 @@ Setup:
 
   -h, --help         Show help
 
+loomdoc ui [--port <n>] [--no-open] [--out <dir>]   Open the local web UI
 loomdoc doctor [--yes]   Check (and offer to install) everything loomdoc needs
 ```
 
+### Document styles
+
+| Style (`--preset`) | What you get |
+|---|---|
+| How-to documentation (`how-to`, default) | Step-by-step instructions someone can follow |
+| Sales walkthrough (`sales-walkthrough`) | A guided product tour for a prospect or customer, focused on value; never invents pricing or metrics |
+| Training / onboarding (`training`) | Explains why as well as how, defines terms, ends with key takeaways |
+| Support article (`support-article`) | A customer-facing help-center article phrased around the reader's problem |
+| Release notes (`release-notes`) | One entry per change: what changed, who benefits, how to use it |
+| Product / feature launch (`product-launch`) | An announcement leading with the headline benefit |
+| Custom (`custom`) | Whatever you describe in `--guidance` |
+
+Every style produces the same kind of output (sections with screenshots), so Markdown, Word,
+and PDF all work with each. Guidance is applied on top of the style and wins where they
+conflict; it can't make the AI invent things the video doesn't show.
+
 With Option A, pass options after the `--`, e.g.
-`npm run dev -- <url> --audience "new engineers" --formats markdown`.
+`npm run dev -- <url> --preset training --guidance "Audience is new support hires" --formats markdown`.
 
 Typical cost is roughly **$0.10 to $0.20** per short video (Sonnet 5, medium effort).
 

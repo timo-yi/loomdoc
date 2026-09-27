@@ -25,6 +25,10 @@ modules get implemented. See [`PRD.md`](PRD.md) for the design and rationale.
 | `src/setup/checks.ts` | ✅ done | Requirement checks: ffmpeg, API key, yt-dlp (with age), Deno (>= 2). |
 | `src/setup/install.ts` | ✅ done | ffmpeg via package manager; checksum-verified yt-dlp/Deno downloads. |
 | `src/setup/preflight.ts` | ✅ done | Consent-gated fix flow; `loomdoc doctor` and per-run checks. |
+| `src/core/generate/styles.ts` | ✅ done | Document style presets (D16), folded into the system prompt with guidance. |
+| `src/ui/server.ts` | ✅ done | `loomdoc ui` server: auth, runs, SSE progress, output file serving (D17). |
+| `src/ui/page.ts` | ✅ done | The single-page UI (HTML, CSS, script). |
+| `src/ui/open.ts` | ✅ done | Opens the browser / file manager. |
 | `src/core/pipeline.ts` | ✅ wired | Orchestrates all stages; throws at the first unimplemented stage. |
 | `src/cli.ts` | ✅ wired | Thin CLI over the core (arg parsing + output paths). |
 | `src/index.ts` | ✅ done | Public library API. |
@@ -62,6 +66,12 @@ and prints manual steps; `--yes` downloaded and verified Deno and yt-dlp into th
 and yt-dlp detected the managed Deno and its bundled YouTube player component. The consent
 prompt was exercised in a real terminal (Enter and Ctrl-D both mean no). Package-manager
 installs of ffmpeg and the macOS/Windows paths are unit-tested but not run live.
+
+**Style presets and web UI (D16, D17):** the UI was exercised in headless Chromium (light,
+dark, and phone widths; no console errors, no horizontal overflow) and the real `loomdoc ui`
+command ran a real Loom through ingest and frame selection over the API, surfacing the
+generation error cleanly with a fake key. The presets' effect on real model output has **not**
+been evaluated yet: that needs a real API key and a side-by-side read of each preset.
 
 Follow-ups (not blockers): tune the frame thresholds and the `maxCandidates` cap against more
 Looms, and the deferred items in PRD §8 (Google Docs, PPTX, batch, private-Loom auth,

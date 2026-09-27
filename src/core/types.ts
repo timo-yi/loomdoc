@@ -7,6 +7,8 @@
  * paths afterward.
  */
 
+import type { StylePresetId } from "./generate/styles.js";
+
 /** A screenshot embedded in the document. */
 export interface Screenshot {
   /** Path to the image file on disk (a frame the model actually saw, copied into images/). */
@@ -47,6 +49,10 @@ export interface DocContext {
   intent?: string;
   /** Free-text style/voice steer, e.g. "terse engineer reference". */
   style?: string;
+  /** Document type preset (PRD D16). Default "how-to". */
+  preset?: StylePresetId;
+  /** Free-text direction from the user to the model, e.g. "focus on the admin settings". */
+  guidance?: string;
 }
 
 export type OutputFormat = "markdown" | "docx" | "pdf";
@@ -96,6 +102,16 @@ export interface LoomdocOptions {
   frames?: Partial<FrameOptions>;
   /** Cap on model-driven getFrameAtTimestamp calls in one run (PRD open item). */
   maxFrameRequests?: number;
+  /** Called as the run moves through its stages (drives CLI and UI progress). */
+  onProgress?: (event: ProgressEvent) => void;
+}
+
+export type ProgressStage = "ingest" | "frames" | "generate" | "render";
+
+export interface ProgressEvent {
+  stage: ProgressStage;
+  /** One human-readable line about what just started or finished. */
+  message: string;
 }
 
 /** The outcome of a run. `files` and the dirs are absolute paths, printed to the user. */
