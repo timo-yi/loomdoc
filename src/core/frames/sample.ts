@@ -17,9 +17,9 @@ export interface SampledFrame {
 
 const FRAME_RE = /^frame-(\d+)\.jpg$/;
 
-/** Sample frames from a stream URL into `workDir` at `fps`. */
+/** Sample frames from a local video file into `workDir` at `fps`. */
 export async function sampleFrames(
-  streamUrl: string,
+  videoPath: string,
   workDir: string,
   fps: number,
 ): Promise<SampledFrame[]> {
@@ -30,7 +30,7 @@ export async function sampleFrames(
     "error",
     "-y",
     "-i",
-    streamUrl,
+    videoPath,
     "-vf",
     `fps=${fps}`,
     "-q:v",

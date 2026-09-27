@@ -9,7 +9,7 @@ import {
   formatTs,
   mediaTypeFor,
 } from "../src/core/generate/generate.js";
-import type { LoomVideo } from "../src/core/ingest/loom.js";
+import type { SourceVideo } from "../src/core/ingest/types.js";
 
 test("formatTs formats mm:ss and h:mm:ss", () => {
   assert.equal(formatTs(0), "0:00");
@@ -46,11 +46,12 @@ test("buildUserContent lays out transcript then one image per candidate", async 
     await writeFile(a, Buffer.from([1, 2, 3]));
     await writeFile(b, Buffer.from([4, 5, 6]));
 
-    const video: LoomVideo = {
+    const video: SourceVideo = {
+      source: "loom",
       id: "vid",
       title: "Demo",
       durationSeconds: 10,
-      streamUrl: "https://example.com/s.m3u8",
+      videoPath: "/tmp/video.mkv",
       transcript: [
         { start: 0, end: 2, text: "Hello" },
         { start: 2, end: 4, text: "World" },

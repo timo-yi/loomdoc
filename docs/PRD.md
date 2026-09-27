@@ -57,19 +57,22 @@ future readers understand *why*, not just *what*.
 | D8 | **Fixed step-granular output schema; renderers per format.** | One structured intermediate (ordered steps: heading + optional screenshot + body) renders to Markdown, Word, PDF today and PowerPoint later (a step = a doc section = a slide). The schema is the fixed container; the LLM owns the contents. |
 | D9 | **Output genre = step-by-step how-to, with a free-text style/context steer.** | Covers the walkthrough use case. Audience/tone adapt via optional context (role, industry, function, audience, use case, intent) or inference from the video. No rigid template menu (that fights LLM judgment and adds surface). |
 | D10 | **Sonnet 5 @ medium by default; model + effort configurable; auto-escalation deferred.** | We don't yet have evidence Sonnet 5 is insufficient. Building the Sonnet→Opus auto-router first would optimize an unmeasured problem. The schema carries a per-step confidence field so escalation slots in later with no refactor. On the Vercel AI SDK, swapping models is a one-line change. |
-| D11 | **v1 targets public / unlisted share links only.** | The clean, no-login GraphQL/SSR path works for unlisted links. Workspace-private videos need an authenticated session (cookie) — more setup, more fragility — deferred. |
+| D11 | **v1 targets public / unlisted share links only.** (Extended to YouTube by D13; the public/unlisted limit still applies.) | The clean, no-login GraphQL/SSR path works for unlisted links. Workspace-private videos need an authenticated session (cookie) — more setup, more fragility — deferred. |
 | D12 | **Repo: `loomdoc`, private, MIT license, under `timo-yi`.** | Private keeps options open (private→public is trivial). MIT is the permissive norm for a tool this size and enables internal sharing / open-sourcing later with zero friction. |
+| D13 | **YouTube is a second source, ingested via the `yt-dlp` binary; ingest returns a source-neutral `SourceVideo`.** | YouTube obfuscates stream and caption URLs (player-JS signatures, proof-of-origin tokens) and changes the scheme every few weeks. yt-dlp is the maintained client that tracks this; shelling out to it (like ffmpeg) keeps that churn out of this codebase, and users fix breakage with `yt-dlp -U`. Captions are read as YouTube's native json3, because the auto-caption VTT repeats each line across cues and would duplicate the transcript. Creator-uploaded captions win over automatic ones, and machine-translated auto tracks are never used. Everything after ingest is source-agnostic. Plain English: Loom and YouTube each have one module that knows how to fetch from them; the rest of loomdoc just sees "a video and its transcript." |
+| D14 | **Download the video track to a per-run scratch dir; delete it however the run ends.** | Frame steps previously streamed from a short-lived signed URL, twice (sampling, then each model frame request). A local copy removes the expiry risk, makes seeks fast and reliable, and is required for YouTube, whose URLs are rate-limited and IP-bound. Only the video track is kept (no audio), stream-copied into Matroska (no re-encode). The scratch dir lives in the OS temp dir, outside the deliverable, and is removed in a `finally`, on SIGINT/SIGTERM, and on exit; any run also sweeps loomdoc scratch dirs older than 24h left by a hard kill. Plain English: the video is downloaded into a temporary folder that is always cleaned up, so nothing piles up on disk. |
 
 ---
 
 ## 4. Pipeline (end to end)
 
 ```
-Loom share URL
+Loom share URL or YouTube URL
       │
-      ├─ Transcript track ──────────────► full timestamped transcript (Loom GraphQL/SSR)
+      ├─ Transcript track ──────────────► full timestamped transcript (Loom GraphQL/SSR, or yt-dlp json3 captions)
       │
-      └─ Video track (HLS) ─► sample frames ─► change-fraction + stability gate ─► settled reps
+      └─ Video track ─► download to scratch dir ─► sample frames ─► change-fraction + stability gate ─► settled reps
+                        (deleted at end of run)
                                                (only deterministic step; no notion of meaning)
       │
       ▼
@@ -158,9 +161,10 @@ The single cost lever is **image count**, controlled directly by the winnowing.
 - **Language:** TypeScript / Node.
 - **Structure:** core library (pure functions: fetch, download, frames, structure, render) +
   thin CLI adapter.
-- **External binary:** `ffmpeg` (frame extraction, HLS seek).
+- **External binaries:** `ffmpeg` (video download, frame sampling and extraction); `yt-dlp`
+  (YouTube only, with a JavaScript runtime such as Deno).
 - **LLM:** Vercel AI SDK with the Anthropic provider. Access via `ANTHROPIC_API_KEY` env var.
-- **Invocation:** `loomdoc <url>` — one video per run.
+- **Invocation:** `loomdoc <url>` (a Loom or YouTube link), one video per run.
 - **Output:** `./out/<video-title>/` containing `doc.md`, `doc.docx`, `doc.pdf`, and `images/`.
   Absolute paths printed at end of run.
 
@@ -183,9 +187,16 @@ The single cost lever is **image count**, controlled directly by the winnowing.
 
 - **Loom's public GraphQL/SSR endpoints are unofficial** and can change. Ingest is isolated behind
   one module so a break is contained and fixable in one place.
-- **Signed CDN URLs expire quickly.** All frame extraction happens during sampling and the
-  tool loop, while the URL is fresh; screenshots are then copied from those already-extracted
-  files, so nothing re-seeks the URL after the (minutes-long) LLM step.
+- **Signed CDN URLs expire quickly.** The video track is downloaded during ingest, right after
+  the URL is issued (D14); every later frame step reads the local copy.
+- **YouTube blocks some networks and changes often.** Cloud and VPN IPs are often challenged
+  with a bot check, and an outdated yt-dlp stops working when YouTube changes its player. Errors
+  name both causes and their fixes (a home connection or browser cookies via the user's yt-dlp
+  config; `yt-dlp -U`). Downloading is against YouTube's Terms of Service; the tool is intended
+  for videos the user owns or has permission to use.
+- **Long videos.** YouTube videos are often far longer than a Loom. Sampling is capped at
+  `maxSampledFrames` (default 2400, i.e. 20 minutes at 2 fps) by lowering the sample rate, which
+  bounds scratch disk use and hashing time. The full transcript is still sent to the model.
 - **Model swap and structured output.** The default `claude-sonnet-5` supports native structured
   output, so `output` + tools coexist cleanly. A model *without* native structured-output support
   would make the provider inject a forced JSON tool alongside `getFrameAtTimestamp` — a different,

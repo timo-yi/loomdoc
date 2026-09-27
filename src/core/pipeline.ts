@@ -1,4 +1,4 @@
-import { copyFile, mkdir, rm } from "node:fs/promises";
+import { copyFile, mkdir } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import {
   DEFAULT_EFFORT,
@@ -10,12 +10,14 @@ import {
   type LoomdocOptions,
   type LoomdocResult,
   type Screenshot,
+  type FrameOptions,
   type Step,
 } from "./types.js";
-import { assertFfmpegAvailable, } from "./util/ffmpeg.js";
+import { assertFfmpegAvailable } from "./util/ffmpeg.js";
 import { LoomdocError } from "./util/errors.js";
 import { slugify } from "./util/slug.js";
-import { fetchLoomVideo } from "./ingest/loom.js";
+import { createScratchDir } from "./util/scratch.js";
+import { fetchVideo } from "./ingest/index.js";
 import { sampleFrames } from "./frames/sample.js";
 import { winnowFrames } from "./frames/winnow.js";
 import { extractFrameAt } from "./frames/extract.js";
@@ -30,38 +32,38 @@ const IMAGES_DIR = "images";
  * the flow; the individual stages are implemented in their own modules.
  */
 export async function runLoomdoc(options: LoomdocOptions): Promise<LoomdocResult> {
-  if (!options.url) throw new LoomdocError("A Loom share URL is required.");
+  if (!options.url) throw new LoomdocError("A Loom or YouTube video URL is required.");
 
   const model = options.model ?? DEFAULT_MODEL;
   const effort = options.effort ?? DEFAULT_EFFORT;
   const formats = options.formats ?? DEFAULT_FORMATS;
   const maxFrameRequests = options.maxFrameRequests ?? DEFAULT_MAX_FRAME_REQUESTS;
-  const frames = { ...DEFAULT_FRAME_OPTIONS, ...options.frames };
   const outRoot = resolve(options.outDir ?? "out");
 
   // Fail early and clearly if ffmpeg is missing.
   await assertFfmpegAvailable();
 
-  // 1. Ingest: timestamped transcript + short-lived stream URL.
-  const video = await fetchLoomVideo(options.url);
-
-  // Output layout: out/<slug>/{document.*, images/}. A scratch dir holds sampled frames.
-  const outputDir = join(outRoot, slugify(video.title));
-  const imagesDir = join(outputDir, IMAGES_DIR);
-  const workDir = join(outputDir, ".frames");
-  await mkdir(imagesDir, { recursive: true });
-  await mkdir(workDir, { recursive: true });
-
-  // Steps 2-5 run against scratch frames; always clean them up afterward so the shared
-  // deliverable folder isn't polluted and disk isn't leaked.
+  // Everything bulky and temporary (downloaded video, captions, sampled frames) lives in a
+  // per-run scratch dir outside the deliverable, removed however the run ends (PRD D14).
+  const scratch = await createScratchDir();
   try {
+    // 1. Ingest: timestamped transcript + the video track, downloaded to local disk.
+    const video = await fetchVideo(options.url, scratch.path);
+    const frames = frameOptionsFor(video.durationSeconds, options.frames);
+
+    // Output layout: out/<slug>/{document.*, images/}.
+    const outputDir = join(outRoot, slugify(video.title));
+    const imagesDir = join(outputDir, IMAGES_DIR);
+    const framesDir = join(scratch.path, "frames");
+    await mkdir(imagesDir, { recursive: true });
+    await mkdir(framesDir, { recursive: true });
+
     // 2. Frame track (the only deterministic step): sample -> winnow to distinct screens.
-    const sampled = await sampleFrames(video.streamUrl, workDir, frames.sampleFps);
+    const sampled = await sampleFrames(video.videoPath, framesDir, frames.sampleFps);
     const candidates = await winnowFrames(sampled, frames);
 
     // 3. Generate: the vision LLM makes every judgment call and may request extra
-    //    exact-timestamp frames via the tool below (capped). Tool-fetched frames go to the
-    //    scratch dir (extracted while the signed URL is still fresh); the model references all
+    //    exact-timestamp frames via the tool below (capped). The model references all
     //    frames by id.
     let frameRequests = 0;
     const requestFrame = async (timestampSeconds: number): Promise<string> => {
@@ -69,8 +71,8 @@ export async function runLoomdoc(options: LoomdocOptions): Promise<LoomdocResult
         throw new LoomdocError(`Exceeded maxFrameRequests (${maxFrameRequests}).`);
       }
       frameRequests += 1;
-      const out = join(workDir, `fetched-${timestampSeconds.toFixed(2)}.png`);
-      return extractFrameAt(video.streamUrl, timestampSeconds, out);
+      const out = join(framesDir, `fetched-${timestampSeconds.toFixed(2)}.png`);
+      return extractFrameAt(video.videoPath, timestampSeconds, out);
     };
 
     const { doc: output, frames: frameFiles } = await generateDoc({
@@ -84,7 +86,7 @@ export async function runLoomdoc(options: LoomdocOptions): Promise<LoomdocResult
     });
 
     // 4. Materialize screenshots by COPYING the exact frames the model saw (by id) into the
-    //    deliverable — no re-extraction, no dependence on the possibly-expired stream URL.
+    //    deliverable, before the scratch dir is removed.
     const doc = await materializeScreenshots(output, frameFiles, imagesDir);
 
     // 5. Render to each requested format off the one structured document.
@@ -92,8 +94,21 @@ export async function runLoomdoc(options: LoomdocOptions): Promise<LoomdocResult
 
     return { doc, outputDir, imagesDir, files };
   } finally {
-    await rm(workDir, { recursive: true, force: true });
+    await scratch.dispose();
   }
+}
+
+/**
+ * Resolve frame options for a video, lowering the sample rate when the default would exceed
+ * `maxSampledFrames`. Winnowing reads `sampleFps` too (for its dwell window), so the
+ * effective rate is written back into the options both steps share.
+ */
+export function frameOptionsFor(durationSeconds: number, overrides?: Partial<FrameOptions>): FrameOptions {
+  const frames = { ...DEFAULT_FRAME_OPTIONS, ...overrides };
+  if (durationSeconds > 0 && frames.maxSampledFrames > 0) {
+    frames.sampleFps = Math.min(frames.sampleFps, frames.maxSampledFrames / durationSeconds);
+  }
+  return frames;
 }
 
 /**

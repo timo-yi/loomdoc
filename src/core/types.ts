@@ -56,7 +56,7 @@ export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 /**
  * Tunables for the deterministic frame-winnowing step (PRD §4). All are thresholds on the
  * fraction of a downscaled frame's cells that change; sensible defaults below, tune against
- * real Looms.
+ * real videos.
  */
 export interface FrameOptions {
   /** Frames per second to sample from the video. */
@@ -71,10 +71,16 @@ export interface FrameOptions {
   dwellSeconds: number;
   /** Hard cap on candidate screenshots shown to the LLM (the cost lever); least-distinct dropped. */
   maxCandidates: number;
+  /**
+   * Upper bound on frames sampled from one video. Longer videos are sampled at a lower rate
+   * so a long YouTube video doesn't produce thousands of scratch frames (disk and hashing time).
+   */
+  maxSampledFrames: number;
 }
 
 /** Everything a single run needs. */
 export interface LoomdocOptions {
+  /** A Loom share link or a YouTube video link. */
   url: string;
   /** Output root; a per-video subfolder is created under it. Default "./out". */
   outDir?: string;
@@ -110,6 +116,8 @@ export const DEFAULT_FRAME_OPTIONS: FrameOptions = {
   motionThreshold: 0.04,
   dwellSeconds: 0.5,
   maxCandidates: 30,
+  // 20 minutes at 2 fps; longer videos drop to a proportionally lower rate.
+  maxSampledFrames: 2400,
 };
 
 export const DEFAULT_MODEL = "claude-sonnet-5";

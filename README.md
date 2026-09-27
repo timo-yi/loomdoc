@@ -1,10 +1,11 @@
 # loomdoc
 
-A lightweight local CLI that turns a **Loom walkthrough** into a screenshot-rich,
+A lightweight local CLI that turns a **Loom or YouTube walkthrough** into a screenshot-rich,
 audience-tailored **how-to document** (Markdown, Word, and PDF).
 
-Point it at a public or unlisted Loom share link and get back finished documentation with the
-right screenshots in the right places, the kind you would otherwise write by hand.
+Point it at a public or unlisted Loom share link or YouTube video and get back finished
+documentation with the right screenshots in the right places, the kind you would otherwise
+write by hand.
 
 > **Status:** v1. See [`docs/PRD.md`](docs/PRD.md) for the full design, the decisions behind
 > it, and what is deliberately deferred. The PRD is the durable source of truth; this README
@@ -12,8 +13,9 @@ right screenshots in the right places, the kind you would otherwise write by han
 
 ## How it works
 
-1. **Ingest** a Loom share link: fetch the timestamped transcript and the video stream (no
-   login, no browser).
+1. **Ingest** a Loom or YouTube link: fetch the timestamped transcript and download the video
+   track to a temporary folder (no login, no browser). The temporary folder is deleted when the
+   run ends, including when it fails or you press Ctrl-C.
 2. **Winnow frames**: sample the video and collapse near-duplicate frames, ignoring cursor
    jitter and scrolling (the only deterministic step; it has no notion of "meaning").
 3. **Let a vision LLM do the judgment**: it receives the full transcript and the deduped
@@ -57,7 +59,27 @@ If it is missing, install it:
 - **Windows**: `winget install ffmpeg` (or `choco install ffmpeg`)
 - **Linux (Debian/Ubuntu)**: `sudo apt-get install -y ffmpeg`
 
-**c) An Anthropic API key** (only the final writing step calls the model). Create one at
+**c) yt-dlp and Deno (only needed for YouTube links).** loomdoc uses
+[yt-dlp](https://github.com/yt-dlp/yt-dlp) to download YouTube videos and captions, and yt-dlp
+uses [Deno](https://deno.com) to handle YouTube's player. Skip this step if you only use Loom.
+Check:
+
+```bash
+yt-dlp --version   # prints a date-style version if installed
+deno --version
+```
+
+If either is missing, install it:
+
+- **macOS**: `brew install yt-dlp deno`
+- **Windows**: `winget install yt-dlp.yt-dlp DenoLand.Deno`
+- **Linux / any OS**: `pipx install yt-dlp` (or `pip install -U yt-dlp`), and
+  `curl -fsSL https://deno.land/install.sh | sh`
+
+YouTube changes its site often, so keep yt-dlp current (`yt-dlp -U`, `brew upgrade yt-dlp`, or
+`pipx upgrade yt-dlp`). An outdated yt-dlp is the most common cause of YouTube failures.
+
+**d) An Anthropic API key** (only the final writing step calls the model). Create one at
 [console.anthropic.com](https://console.anthropic.com/settings/keys), then export it in your
 terminal:
 
@@ -91,13 +113,14 @@ You have two options. Both do the same thing.
 **Option A – run it directly from the project (no extra setup):**
 
 ```bash
-npm run dev -- <loom-share-url>
+npm run dev -- <loom-or-youtube-url>
 ```
 
 The `--` matters: everything after it is passed to loomdoc. Example:
 
 ```bash
 npm run dev -- https://www.loom.com/share/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+npm run dev -- https://www.youtube.com/watch?v=xxxxxxxxxxx
 ```
 
 **Option B – install a real `loomdoc` command on your PATH** (so you can run it from anywhere,
@@ -139,7 +162,7 @@ in the adjacent `images/` folder, so keep them together if you move the `.md`.
 ## Options
 
 ```
-loomdoc <loom-share-url> [options]
+loomdoc <loom-or-youtube-url> [options]
 
   --out <dir>        Output root directory (default: ./out)
   --formats <list>   Comma-separated: markdown,docx,pdf (default: all three)
@@ -168,14 +191,22 @@ Typical cost is roughly **$0.10 to $0.20** per short video (Sonnet 5, medium eff
 | You see | What it means | Fix |
 |---------|---------------|-----|
 | `ffmpeg not found on PATH` | ffmpeg isn't installed | Install ffmpeg (step 1b), then re-run |
-| An error mentioning `ANTHROPIC_API_KEY` or authentication | The key isn't set in this terminal | `export ANTHROPIC_API_KEY=...` (step 1c) and check `echo $ANTHROPIC_API_KEY` |
+| An error mentioning `ANTHROPIC_API_KEY` or authentication | The key isn't set in this terminal | `export ANTHROPIC_API_KEY=...` (step 1d) and check `echo $ANTHROPIC_API_KEY` |
 | `Could not resolve a video stream URL ... (last HTTP status 403)` with "network is blocking loom.com" | Either the video is private/password-protected, or your network/proxy blocks loom.com | Use a public/unlisted link; if on a restricted network, run somewhere with open access |
 | `No transcript is available for this Loom video` | The video has no captions/transcript | loomdoc needs the transcript; pick a video that has one |
+| `Failed to launch yt-dlp` | yt-dlp isn't installed (YouTube links only) | Install yt-dlp and Deno (step 1c), then re-run |
+| `yt-dlp failed ... Sign in to confirm you're not a bot` | YouTube is challenging your network (common on cloud servers and VPNs) | Run from a normal home or office connection, or add `--cookies-from-browser chrome` (or your browser) to your [yt-dlp config file](https://github.com/yt-dlp/yt-dlp#configuration) |
+| `yt-dlp failed ... HTTP Error 403` or `Requested format is not available` | yt-dlp is out of date, or Deno is missing | `yt-dlp -U` (or upgrade via your package manager) and install Deno |
+| `No usable captions are available for this YouTube video` | The video has neither uploaded nor automatic captions in its original language | loomdoc needs the transcript; pick a video that has captions |
 | A wall of `Deprecated: "image" content part` warnings | Harmless AI SDK deprecation notices | Cosmetic only; safe to ignore |
 
 ## Scope (v1)
 
-- Public / unlisted Loom share links.
+- Public / unlisted Loom share links and public / unlisted YouTube videos.
+- Walkthrough-style recordings. Lectures, talking-head videos, and heavily edited content work
+  but produce weaker how-to documents.
+- Downloading YouTube videos is against YouTube's Terms of Service. Use it for videos you own or
+  have permission to use.
 - One video per run.
 - Outputs: Markdown, Word, PDF.
 
