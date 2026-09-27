@@ -59,25 +59,23 @@ If it is missing, install it:
 - **Windows**: `winget install ffmpeg` (or `choco install ffmpeg`)
 - **Linux (Debian/Ubuntu)**: `sudo apt-get install -y ffmpeg`
 
-**c) yt-dlp and Deno (only needed for YouTube links).** loomdoc uses
-[yt-dlp](https://github.com/yt-dlp/yt-dlp) to download YouTube videos and captions, and yt-dlp
-uses [Deno](https://deno.com) to handle YouTube's player. Skip this step if you only use Loom.
-Check:
+**c) yt-dlp and Deno (only needed for YouTube links; loomdoc can install these for you).**
+loomdoc uses [yt-dlp](https://github.com/yt-dlp/yt-dlp) to download YouTube videos and
+captions, and yt-dlp uses [Deno](https://deno.com) to run YouTube's player code in a sandbox.
+Skip this step if you only use Loom.
 
-```bash
-yt-dlp --version   # prints a date-style version if installed
-deno --version
-```
+The easiest route is to let loomdoc handle it: the first time you use a YouTube link (or run
+`loomdoc doctor`), it offers to download both from their official GitHub releases into its own
+folder, verifies their checksums, and needs no admin rights. It also offers to update yt-dlp
+when your copy is more than 60 days old, which matters because YouTube regularly breaks older
+versions.
 
-If either is missing, install it:
+If you prefer to install them yourself instead:
 
 - **macOS**: `brew install yt-dlp deno`
 - **Windows**: `winget install yt-dlp.yt-dlp DenoLand.Deno`
-- **Linux / any OS**: `pipx install yt-dlp` (or `pip install -U yt-dlp`), and
+- **Linux / any OS**: `pipx install yt-dlp`, and
   `curl -fsSL https://deno.land/install.sh | sh`
-
-YouTube changes its site often, so keep yt-dlp current (`yt-dlp -U`, `brew upgrade yt-dlp`, or
-`pipx upgrade yt-dlp`). An outdated yt-dlp is the most common cause of YouTube failures.
 
 **d) An Anthropic API key** (only the final writing step calls the model). Create one at
 [console.anthropic.com](https://console.anthropic.com/settings/keys), then export it in your
@@ -94,6 +92,11 @@ on most Linux) and open a new terminal. Verify it is set:
 ```bash
 echo $ANTHROPIC_API_KEY   # should print your key, not an empty line
 ```
+
+**e) Check everything at once (optional).** After step 2, run `loomdoc doctor` (or
+`npm run dev -- doctor`). It lists what is installed, and for anything missing it explains the
+problem and asks before installing it. Nothing is installed unless you answer `y`; pressing
+Enter means no. Every normal run does the same check for just what that run needs.
 
 ### 2. Get loomdoc
 
@@ -178,7 +181,12 @@ Relevance context (all optional; inferred from the video when omitted):
   --intent <text>
   --style <text>     Free-text voice/style steer
 
+Setup:
+  -y, --yes          Answer "yes" to install prompts (also works without a terminal)
+
   -h, --help         Show help
+
+loomdoc doctor [--yes]   Check (and offer to install) everything loomdoc needs
 ```
 
 With Option A, pass options after the `--`, e.g.
@@ -190,13 +198,14 @@ Typical cost is roughly **$0.10 to $0.20** per short video (Sonnet 5, medium eff
 
 | You see | What it means | Fix |
 |---------|---------------|-----|
-| `ffmpeg not found on PATH` | ffmpeg isn't installed | Install ffmpeg (step 1b), then re-run |
+| `ffmpeg not found on PATH` | ffmpeg isn't installed | Run `loomdoc doctor` and accept the install, or install it yourself (step 1b) |
 | An error mentioning `ANTHROPIC_API_KEY` or authentication | The key isn't set in this terminal | `export ANTHROPIC_API_KEY=...` (step 1d) and check `echo $ANTHROPIC_API_KEY` |
 | `Could not resolve a video stream URL ... (last HTTP status 403)` with "network is blocking loom.com" | Either the video is private/password-protected, or your network/proxy blocks loom.com | Use a public/unlisted link; if on a restricted network, run somewhere with open access |
 | `No transcript is available for this Loom video` | The video has no captions/transcript | loomdoc needs the transcript; pick a video that has one |
-| `Failed to launch yt-dlp` | yt-dlp isn't installed (YouTube links only) | Install yt-dlp and Deno (step 1c), then re-run |
+| `Failed to launch yt-dlp` | yt-dlp isn't installed (YouTube links only) | Run `loomdoc doctor` and accept the install, or install it yourself (step 1c) |
 | `yt-dlp failed ... Sign in to confirm you're not a bot` | YouTube is challenging your network (common on cloud servers and VPNs) | Run from a normal home or office connection, or add `--cookies-from-browser chrome` (or your browser) to your [yt-dlp config file](https://github.com/yt-dlp/yt-dlp#configuration) |
-| `yt-dlp failed ... HTTP Error 403` or `Requested format is not available` | yt-dlp is out of date, or Deno is missing | `yt-dlp -U` (or upgrade via your package manager) and install Deno |
+| `yt-dlp failed ... HTTP Error 403` or `Requested format is not available` | yt-dlp is out of date, or Deno is missing | Run `loomdoc doctor` to update yt-dlp and install Deno |
+| An install step fails inside `loomdoc doctor` | The package manager or download failed (network, permissions) | The message says what failed; the printed manual instructions always work as a fallback |
 | `No usable captions are available for this YouTube video` | The video has neither uploaded nor automatic captions in its original language | loomdoc needs the transcript; pick a video that has captions |
 | A wall of `Deprecated: "image" content part` warnings | Harmless AI SDK deprecation notices | Cosmetic only; safe to ignore |
 

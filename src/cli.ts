@@ -2,11 +2,15 @@
 import { parseArgs } from "node:util";
 import { runLoomdoc } from "./index.js";
 import type { DocContext, Effort, OutputFormat } from "./core/types.js";
+import { detectSource } from "./core/ingest/index.js";
+import { requirementsFor } from "./setup/checks.js";
+import { isInteractiveTerminal, runPreflight, terminalIO } from "./setup/preflight.js";
 
 const USAGE = `loomdoc – turn a Loom or YouTube walkthrough into a screenshot-rich how-to doc
 
 Usage:
   loomdoc <loom-or-youtube-url> [options]
+  loomdoc doctor [--yes]     Check (and offer to install) everything loomdoc needs
 
 Options:
   --out <dir>        Output root directory (default: ./out)
@@ -23,10 +27,13 @@ Relevance context (all optional; inferred from the video when omitted):
   --intent <text>
   --style <text>     Free-text voice/style steer
 
+Setup:
+  -y, --yes          Answer "yes" to install prompts (also works without a terminal)
+
   -h, --help         Show this help
 
-Requires ffmpeg on PATH and ANTHROPIC_API_KEY in the environment.
-YouTube links also require yt-dlp on PATH (plus Deno, which yt-dlp uses for YouTube).
+Requires ffmpeg and ANTHROPIC_API_KEY; YouTube links also need yt-dlp and Deno.
+loomdoc checks these at launch and offers to install anything missing.
 `;
 
 async function main(): Promise<void> {
@@ -44,6 +51,7 @@ async function main(): Promise<void> {
       "use-case": { type: "string" },
       intent: { type: "string" },
       style: { type: "string" },
+      yes: { type: "boolean", short: "y" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -52,6 +60,23 @@ async function main(): Promise<void> {
   if (values.help || !url) {
     process.stdout.write(USAGE);
     process.exit(values.help ? 0 : 1);
+  }
+
+  const preflight = { interactive: isInteractiveTerminal(), assumeYes: values.yes ?? false };
+
+  if (url === "doctor") {
+    process.stderr.write("Checking what loomdoc needs:\n");
+    const ready = await runPreflight(requirementsFor({ youtube: true }), terminalIO(), { ...preflight, verbose: true });
+    process.stderr.write(ready ? "\nAll set.\n" : "\nSome requirements are still missing (see above).\n");
+    process.exit(ready ? 0 : 1);
+  }
+
+  // Check only what this run needs, before any download or spend.
+  const needs = { youtube: detectSource(url) === "youtube" };
+  const ready = await runPreflight(requirementsFor(needs), terminalIO(), { ...preflight, verbose: false });
+  if (!ready) {
+    process.stderr.write("\nloomdoc can't run until the items above are fixed.\n");
+    process.exit(1);
   }
 
   const formats = values.formats

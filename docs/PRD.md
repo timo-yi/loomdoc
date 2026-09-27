@@ -61,6 +61,7 @@ future readers understand *why*, not just *what*.
 | D12 | **Repo: `loomdoc`, private, MIT license, under `timo-yi`.** | Private keeps options open (private→public is trivial). MIT is the permissive norm for a tool this size and enables internal sharing / open-sourcing later with zero friction. |
 | D13 | **YouTube is a second source, ingested via the `yt-dlp` binary; ingest returns a source-neutral `SourceVideo`.** | YouTube obfuscates stream and caption URLs (player-JS signatures, proof-of-origin tokens) and changes the scheme every few weeks. yt-dlp is the maintained client that tracks this; shelling out to it (like ffmpeg) keeps that churn out of this codebase, and users fix breakage with `yt-dlp -U`. Captions are read as YouTube's native json3, because the auto-caption VTT repeats each line across cues and would duplicate the transcript. Creator-uploaded captions win over automatic ones, and machine-translated auto tracks are never used. Everything after ingest is source-agnostic. Plain English: Loom and YouTube each have one module that knows how to fetch from them; the rest of loomdoc just sees "a video and its transcript." |
 | D14 | **Download the video track to a per-run scratch dir; delete it however the run ends.** | Frame steps previously streamed from a short-lived signed URL, twice (sampling, then each model frame request). A local copy removes the expiry risk, makes seeks fast and reliable, and is required for YouTube, whose URLs are rate-limited and IP-bound. Only the video track is kept (no audio), stream-copied into Matroska (no re-encode). The scratch dir lives in the OS temp dir, outside the deliverable, and is removed in a `finally`, on SIGINT/SIGTERM, and on exit; any run also sweeps loomdoc scratch dirs older than 24h left by a hard kill. Plain English: the video is downloaded into a temporary folder that is always cleaned up, so nothing piles up on disk. |
+| D15 | **Check requirements at launch and offer to install what is missing, only with explicit consent.** | Missing or outdated external tools are the most likely setup failure. Each run checks what it needs (ffmpeg and the API key always; yt-dlp and Deno for YouTube), and `loomdoc doctor` checks everything. Prompts default to "no", nothing is installed without a terminal unless `--yes` is passed, and declining prints manual steps. ffmpeg is installed via the system package manager (Homebrew, winget, Scoop, Chocolatey, apt, dnf, pacman, apk), in the user's terminal so sudo prompts go to them. yt-dlp and Deno are downloaded from their official GitHub releases into a loomdoc-owned folder, verified against each release's published SHA-256 checksums, with no admin rights needed; a managed copy takes precedence over one on PATH. yt-dlp older than 60 days triggers an update offer, since YouTube breaks old versions. Deno is kept over Node as yt-dlp's JavaScript runtime because yt-dlp runs YouTube's player code sandboxed only under Deno. Plain English: loomdoc tells you what's missing and fixes it if you say yes, without needing admin rights for the YouTube tools. |
 
 ---
 
@@ -162,7 +163,7 @@ The single cost lever is **image count**, controlled directly by the winnowing.
 - **Structure:** core library (pure functions: fetch, download, frames, structure, render) +
   thin CLI adapter.
 - **External binaries:** `ffmpeg` (video download, frame sampling and extraction); `yt-dlp`
-  (YouTube only, with a JavaScript runtime such as Deno).
+  and Deno (YouTube only). All are checked at launch and can be installed by loomdoc (D15).
 - **LLM:** Vercel AI SDK with the Anthropic provider. Access via `ANTHROPIC_API_KEY` env var.
 - **Invocation:** `loomdoc <url>` (a Loom or YouTube link), one video per run.
 - **Output:** `./out/<video-title>/` containing `doc.md`, `doc.docx`, `doc.pdf`, and `images/`.
@@ -194,6 +195,10 @@ The single cost lever is **image count**, controlled directly by the winnowing.
   name both causes and their fixes (a home connection or browser cookies via the user's yt-dlp
   config; `yt-dlp -U`). Downloading is against YouTube's Terms of Service; the tool is intended
   for videos the user owns or has permission to use.
+- **Managed-tool downloads trust GitHub releases.** The SHA-256 check (D15) guarantees the file
+  is exactly what the release published (no corruption or truncation), but the checksum comes
+  from the same release, so it does not protect against a compromised release. This matches
+  how the projects' own installers work.
 - **Long videos.** YouTube videos are often far longer than a Loom. Sampling is capped at
   `maxSampledFrames` (default 2400, i.e. 20 minutes at 2 fps) by lowering the sample rate, which
   bounds scratch disk use and hashing time. The full transcript is still sent to the model.
