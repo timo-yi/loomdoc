@@ -158,8 +158,10 @@ a page in your browser where you paste a link, pick a document style, add any gu
 AI, and click Generate. The page shows progress, then links to the finished files and a preview.
 
 - The page runs only on your own computer (`127.0.0.1`) and needs the private link printed in
-  the terminal, which changes every time you start it. Keep the terminal open while you use it,
-  and press Ctrl-C there to stop.
+  the terminal. The link works once, in one browser, and a new one is made every time you start
+  `loomdoc ui`; loomdoc opens it in your default browser for you. To use a different browser,
+  start with `loomdoc ui --no-open` and paste the link there. Keep the terminal open while you
+  use the page, and press Ctrl-C there to stop.
 - `--port <n>` picks a fixed port, `--no-open` skips opening the browser, and `--out <dir>`
   sets where documents are saved.
 - Installs always happen in the terminal, never from the web page.
@@ -230,8 +232,9 @@ loomdoc doctor [--yes]   Check (and offer to install) everything loomdoc needs
 Every style produces the same kind of output (sections with screenshots), so Markdown, Word,
 and PDF all work with each. Guidance is applied on top of the style and wins where they
 conflict, but it can't make the AI invent facts: prices, metrics, customer names, dates and
-similar details appear only if the video shows or says them, or if you supply them in your
-guidance (for example, "our standard onboarding takes 2 weeks").
+similar details appear only if the video shows or says them (including its title), or if you
+supply them in your guidance or the audience and context fields (for example, "our standard
+onboarding takes 2 weeks").
 
 With Option A, pass options after the `--`, e.g.
 `npm run dev -- <url> --preset training --guidance "Audience is new support hires" --formats markdown`.

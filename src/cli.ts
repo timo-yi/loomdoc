@@ -174,10 +174,17 @@ async function startUi(launch: UiLaunch): Promise<void> {
     },
   });
 
+  // The link is single-use, and auto-opening spends it in the default browser, so say which
+  // browser holds the session and how to use a different one.
   process.stderr.write(
-    `\nloomdoc UI is running. Open this private link (it changes each time):\n\n  ${server.url}\n\n` +
-      "Keep this terminal open while you use it. Press Ctrl-C to stop.\n",
+    launch.open
+      ? "\nloomdoc UI is running and opening in your default browser.\n" +
+          "If it didn't open, use this private link. It works once, and a new one is made each time\n" +
+          `loomdoc ui starts (to use a different browser, restart with --no-open):\n\n  ${server.url}\n\n`
+      : "\nloomdoc UI is running. Open this private link in the browser you want to use.\n" +
+          `It works once, and a new one is made each time loomdoc ui starts:\n\n  ${server.url}\n\n`,
   );
+  process.stderr.write("Keep this terminal open while you use it. Press Ctrl-C to stop.\n");
   if (launch.open) openInBrowser(server.url);
 }
 

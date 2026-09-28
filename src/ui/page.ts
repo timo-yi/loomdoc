@@ -116,8 +116,9 @@ const UNAUTHORIZED_REASONS = {
     "That link doesn't match this loomdoc session. Open the link printed in the terminal where you ran " +
     "<code>loomdoc ui</code> (it changes every time loomdoc ui starts).",
   used:
-    "That link has already been used, and each link works only once. If you opened it in another browser, " +
-    "stop loomdoc ui in the terminal (Ctrl-C) and start it again to get a new link.",
+    "That link has already been used: each link works once, in one browser, and loomdoc ui opens it in " +
+    "your default browser automatically. To use this browser instead, stop loomdoc ui in the terminal " +
+    "(Ctrl-C), start it again with <code>loomdoc ui --no-open</code>, and paste the new link here.",
 } as const;
 
 export function unauthorizedHtml(reason: keyof typeof UNAUTHORIZED_REASONS): string {

@@ -117,7 +117,7 @@ export function buildSystemPrompt(context?: DocContext): string {
     "Reference screenshots ONLY by an id you were shown: a candidate id (c0, c1, …) or an id returned by getFrameAtTimestamp (f0, f1, …). Never invent an id.",
     "If the clearest moment for a step falls between candidates, call getFrameAtTimestamp(timestampSeconds) to fetch and view that exact frame; it returns a new id you can then reference.",
     "Do not put a screenshot on every step; use them where they add clarity. Never describe UI you cannot see in a screenshot or read in the transcript.",
-    "Never state specific facts (prices, metrics, results, customer or company names, integrations, version numbers, dates, availability, or commitments) unless they appear in the transcript, a screenshot, or the direction from the person requesting the document. When a fact is not available, write around it rather than inventing or estimating it.",
+    "Never state specific facts (prices, metrics, results, customer or company names, integrations, version numbers, dates, availability, or commitments) unless they appear in the transcript, a screenshot, the video title, the context supplied below, or the direction from the person requesting the document. When a fact is not available, write around it rather than inventing or estimating it.",
     "Set needsDeeperReasoning: true on any step that is ambiguous (unclear screenshot, silent transcript, or UI you inferred but could not fully see).",
     "Write a short overview that orients the reader, and always set the audience field.",
     "",
@@ -148,7 +148,7 @@ export function buildSystemPrompt(context?: DocContext): string {
   if (guidance) {
     lines.push(
       "",
-      "Direction from the person requesting this document. Follow it; where it conflicts with the document type above, it wins. It never overrides the rules at the top: screenshot ids, not describing what you cannot see, and not stating facts that are absent from the video and this direction. If it asks for something those rules forbid (for example, figures the video does not give), do what you can within the rules and do not invent the rest:",
+      "Direction from the person requesting this document. Follow it; where it conflicts with the document type above, it wins. It never overrides the rules at the top: screenshot ids, not describing what you cannot see, and not stating facts that are absent from the video, its title, the supplied context, and this direction. If it asks for something those rules forbid (for example, figures the video does not give), do what you can within the rules and do not invent the rest:",
       `<direction>\n${guidance}\n</direction>`,
     );
   }

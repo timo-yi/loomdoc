@@ -115,6 +115,8 @@ test("the no-invented-facts rule is fixed, sits above guidance, and survives eve
     const direction = prompt.indexOf("<direction>");
     assert.ok(rule >= 0, `${preset}: grounding rule present`);
     assert.ok(rule < direction, `${preset}: grounding rule comes before the user's direction`);
-    assert.match(prompt, /not stating facts that are absent from the video and this direction/);
+    assert.match(prompt, /not stating facts that are absent from the video, its title, the supplied context, and this direction/);
+    // Supplied context (e.g. the prospect's company name) and the title are legitimate sources.
+    assert.match(prompt, /the video title, the context supplied below, or the direction/);
   }
 });
