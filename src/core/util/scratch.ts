@@ -1,6 +1,6 @@
 import { rmSync } from "node:fs";
 import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { constants as osConstants, tmpdir } from "node:os";
 import { join } from "node:path";
 import { killTrackedChildren } from "./children.js";
 
@@ -51,10 +51,12 @@ export async function createScratchDir(baseDir: string = tmpdir()): Promise<Scra
     process.off("exit", removeSync);
   };
   // Clean up, then re-raise the signal with our handler gone so the process still terminates
-  // the way it would have without us.
+  // the way it would have without us. Windows can't re-raise SIGHUP/SIGBREAK (process.kill
+  // throws ENOSYS), so there the process exits with the conventional 128 + signal code.
   const onSignal = (signal: NodeJS.Signals): void => {
     removeSync();
     detach();
+    if (process.platform === "win32") process.exit(128 + (osConstants.signals[signal] ?? 0));
     process.kill(process.pid, signal);
   };
 

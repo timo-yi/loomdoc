@@ -191,8 +191,8 @@ The single cost lever is **image count**, controlled directly by the winnowing.
   the URL is issued (D14); every later frame step reads the local copy.
 - **YouTube blocks some networks and changes often.** Cloud and VPN IPs are often challenged
   with a bot check, and an outdated yt-dlp stops working when YouTube changes its player. Errors
-  name both causes and their fixes (a home connection or browser cookies via the user's yt-dlp
-  config; `yt-dlp -U`). Downloading is against YouTube's Terms of Service; the tool is intended
+  name both causes and their fixes (a home connection, or browser cookies in loomdoc's own
+  `yt-dlp.conf`; an updated yt-dlp). Downloading is against YouTube's Terms of Service; the tool is intended
   for videos the user owns or has permission to use.
 - **Long videos.** YouTube videos are often far longer than a Loom. Sampling is capped at
   `maxSampledFrames` (default 2400, i.e. 20 minutes at 2 fps) by lowering the sample rate, which
