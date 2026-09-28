@@ -1,4 +1,4 @@
-import type { ChildProcess } from "node:child_process";
+import { spawnSync, type ChildProcess } from "node:child_process";
 
 /**
  * Registry of the external processes loomdoc starts (ffmpeg, yt-dlp), so a signal that ends
@@ -23,7 +23,13 @@ export function trackChild<T extends ChildProcess>(proc: T): T {
 export function killTrackedChildren(): void {
   for (const proc of live) {
     try {
-      proc.kill("SIGTERM");
+      if (process.platform === "win32" && proc.pid !== undefined) {
+        // The standalone yt-dlp.exe is a launcher that starts a separate worker process, and
+        // killing a process on Windows does not stop its children, so end the whole tree.
+        spawnSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+      } else {
+        proc.kill("SIGTERM");
+      }
     } catch {
       // Already gone.
     }

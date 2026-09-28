@@ -23,6 +23,8 @@ import type { HostInfo } from "./platform.js";
 export interface CommandStep {
   command: string;
   args: string[];
+  /** A failure here is reported but does not stop the install (e.g. a package-list refresh). */
+  optional?: boolean;
 }
 
 export interface CommandPlan {
@@ -37,33 +39,40 @@ export interface CommandPlan {
 interface ManagerSpec {
   via: string;
   command: string;
-  /** Argument lists for each invocation of `command`. */
-  steps: string[][];
+  /** Each invocation of `command`: its arguments, and whether a failure may be tolerated. */
+  steps: Array<{ args: string[]; optional?: boolean }>;
   sudo: boolean;
 }
 
 const FFMPEG_MANAGERS: Partial<Record<NodeJS.Platform, ManagerSpec[]>> = {
   darwin: [
-    { via: "Homebrew", command: "brew", steps: [["install", "ffmpeg"]], sudo: false },
-    { via: "MacPorts", command: "port", steps: [["install", "ffmpeg"]], sudo: true },
+    { via: "Homebrew", command: "brew", steps: [{ args: ["install", "ffmpeg"] }], sudo: false },
+    { via: "MacPorts", command: "port", steps: [{ args: ["install", "ffmpeg"] }], sudo: true },
   ],
   win32: [
     {
       via: "winget",
       command: "winget",
-      steps: [["install", "--id", "Gyan.FFmpeg", "-e", "--accept-source-agreements", "--accept-package-agreements"]],
+      steps: [{ args: ["install", "--id", "Gyan.FFmpeg", "-e", "--accept-source-agreements", "--accept-package-agreements"] }],
       sudo: false,
     },
-    { via: "Scoop", command: "scoop", steps: [["install", "ffmpeg"]], sudo: false },
-    { via: "Chocolatey", command: "choco", steps: [["install", "ffmpeg", "-y"]], sudo: false },
+    { via: "Scoop", command: "scoop", steps: [{ args: ["install", "ffmpeg"] }], sudo: false },
+    { via: "Chocolatey", command: "choco", steps: [{ args: ["install", "ffmpeg", "-y"] }], sudo: false },
   ],
   linux: [
     // Fresh systems and containers often ship with empty package lists, so refresh them first.
-    { via: "apt", command: "apt-get", steps: [["update"], ["install", "-y", "ffmpeg"]], sudo: true },
+    // The refresh is optional: it fails if any single third-party repository is broken, while
+    // installing ffmpeg from the main archive can still succeed.
+    {
+      via: "apt",
+      command: "apt-get",
+      steps: [{ args: ["update"], optional: true }, { args: ["install", "-y", "ffmpeg"] }],
+      sudo: true,
+    },
     // Stock Fedora ships ffmpeg as "ffmpeg-free"; the full build needs RPM Fusion.
-    { via: "dnf", command: "dnf", steps: [["install", "-y", "ffmpeg-free"]], sudo: true },
-    { via: "pacman", command: "pacman", steps: [["-S", "--needed", "--noconfirm", "ffmpeg"]], sudo: true },
-    { via: "apk", command: "apk", steps: [["add", "--no-cache", "ffmpeg"]], sudo: true },
+    { via: "dnf", command: "dnf", steps: [{ args: ["install", "-y", "ffmpeg-free"] }], sudo: true },
+    { via: "pacman", command: "pacman", steps: [{ args: ["-S", "--needed", "--noconfirm", "ffmpeg"] }], sudo: true },
+    { via: "apk", command: "apk", steps: [{ args: ["add", "--no-cache", "ffmpeg"] }], sudo: true },
   ],
 };
 
@@ -76,10 +85,15 @@ export function ffmpegInstallPlan(host: HostInfo, has: (command: string) => bool
     if (!has(spec.command)) continue;
     const useSudo = spec.sudo && !host.isRoot;
     if (useSudo && !has("sudo")) continue;
-    const steps = spec.steps.map((args) =>
-      useSudo ? { command: "sudo", args: [spec.command, ...args] } : { command: spec.command, args },
+    const steps = spec.steps.map(({ args, optional }) =>
+      useSudo
+        ? { command: "sudo", args: [spec.command, ...args], optional }
+        : { command: spec.command, args, optional },
     );
-    const display = steps.map((st) => [st.command, ...st.args].join(" ")).join(" && ");
+    // Shell-style: "a; b" when b runs even if a fails, "a && b" when it doesn't.
+    const display = steps
+      .map((st, i) => (i === 0 ? "" : steps[i - 1]!.optional ? "; " : " && ") + [st.command, ...st.args].join(" "))
+      .join("");
     return { steps, display, via: spec.via };
   }
   return null;
