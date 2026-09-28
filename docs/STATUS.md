@@ -64,7 +64,7 @@ normal connection is its live validation.
 **Launch checks (D15):** validated live on Linux: `doctor` without a terminal installs nothing
 and prints manual steps; `--yes` downloaded and verified Deno and yt-dlp into the managed dir,
 and yt-dlp detected the managed Deno and its bundled YouTube player component. The consent
-prompt was exercised in a real terminal (Enter and Ctrl-D both mean no). Package-manager
+prompt was exercised in a real terminal (Enter, "n" and Ctrl-D mean no; Ctrl-C aborts with exit code 130). Package-manager
 installs of ffmpeg and the macOS/Windows paths are unit-tested but not run live.
 
 **Style presets and web UI (D16, D17):** the UI was exercised in headless Chromium (light,

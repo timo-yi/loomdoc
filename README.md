@@ -96,7 +96,7 @@ echo $ANTHROPIC_API_KEY   # should print your key, not an empty line
 **e) Check everything at once (optional).** After step 2, run `loomdoc doctor` (or
 `npm run dev -- doctor`). It lists what is installed, and for anything missing it explains the
 problem and asks before installing it. Nothing is installed unless you answer `y`; pressing
-Enter means no. Every normal run does the same check for just what that run needs.
+Enter means no, and Ctrl-C stops loomdoc. Every normal run does the same check for just what that run needs.
 
 ### 2. Get loomdoc
 
@@ -245,7 +245,7 @@ Typical cost is roughly **$0.10 to $0.20** per short video (Sonnet 5, medium eff
 | `Could not resolve a video stream URL ... (last HTTP status 403)` with "network is blocking loom.com" | Either the video is private/password-protected, or your network/proxy blocks loom.com | Use a public/unlisted link; if on a restricted network, run somewhere with open access |
 | `No transcript is available for this Loom video` | The video has no captions/transcript | loomdoc needs the transcript; pick a video that has one |
 | `Failed to launch yt-dlp` | yt-dlp isn't installed (YouTube links only) | Run `loomdoc doctor` and accept the install, or install it yourself (step 1c) |
-| `yt-dlp failed ... Sign in to confirm you're not a bot` | YouTube is challenging your network (common on cloud servers and VPNs) | Run from a normal home or office connection, or add `--cookies-from-browser chrome` (or your browser) to your [yt-dlp config file](https://github.com/yt-dlp/yt-dlp#configuration) |
+| `yt-dlp failed ... Sign in to confirm you're not a bot` | YouTube is challenging your network (common on cloud servers and VPNs) | Run from a normal home or office connection, or put `--cookies-from-browser chrome` (or your browser) in loomdoc's yt-dlp config file: `~/Library/Application Support/loomdoc/yt-dlp.conf` (macOS), `~/.local/share/loomdoc/yt-dlp.conf` (Linux), or `%LOCALAPPDATA%\loomdoc\yt-dlp.conf` (Windows). loomdoc ignores your general yt-dlp config so its download settings can't interfere. |
 | `yt-dlp failed ... HTTP Error 403` or `Requested format is not available` | yt-dlp is out of date, or Deno is missing | Run `loomdoc doctor` to update yt-dlp and install Deno |
 | An install step fails inside `loomdoc doctor` | The package manager or download failed (network, permissions) | The message says what failed; the printed manual instructions always work as a fallback |
 | `No usable captions are available for this YouTube video` | The video has neither uploaded nor automatic captions in its original language | loomdoc needs the transcript; pick a video that has captions |

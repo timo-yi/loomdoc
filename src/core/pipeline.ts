@@ -59,7 +59,7 @@ export async function runLoomdoc(options: LoomdocOptions): Promise<LoomdocResult
     const frames = frameOptionsFor(video.durationSeconds, options.frames);
 
     // Output layout: out/<slug>/{document.*, images/}.
-    const outputDir = join(outRoot, slugify(video.title));
+    const outputDir = join(outRoot, slugify(video.title, `${video.source}-${video.id}`));
     const imagesDir = join(outputDir, IMAGES_DIR);
     const framesDir = join(scratch.path, "frames");
     await mkdir(imagesDir, { recursive: true });

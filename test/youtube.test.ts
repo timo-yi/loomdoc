@@ -156,6 +156,7 @@ test("maps yt-dlp failures to actionable hints", () => {
   );
   assert.match(bot, /ERROR: \[youtube\] abc: Sign in/);
   assert.match(bot, /cookies-from-browser/);
+  assert.match(bot, /yt-dlp\.conf/);
 
   assert.match(describeYtDlpFailure("ERROR: [youtube] abc: Private video. Sign in", 1), /public and unlisted/);
   assert.match(describeYtDlpFailure("ERROR: unable to download: HTTP Error 403: Forbidden", 1), /loomdoc doctor/);

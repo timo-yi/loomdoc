@@ -48,7 +48,9 @@ export interface CaptureResult {
 }
 
 /** Run a command briefly and capture stdout; never throws. */
-export function capture(command: string, args: string[], timeoutMs = 20_000): Promise<CaptureResult> {
+// Generous: the first launch of a standalone yt-dlp unpacks itself and may be scanned by
+// antivirus or Gatekeeper, and a timeout would be misreported as "not installed".
+export function capture(command: string, args: string[], timeoutMs = 90_000): Promise<CaptureResult> {
   return new Promise((resolve) => {
     let stdout = "";
     let settled = false;

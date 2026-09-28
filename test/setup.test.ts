@@ -13,8 +13,8 @@ test("ffmpeg plan uses the first available package manager, with sudo when neede
   const has = (...cmds: string[]) => (c: string) => cmds.includes(c);
 
   assert.equal(ffmpegInstallPlan(host({ platform: "darwin" }), has("brew"))?.display, "brew install ffmpeg");
-  assert.equal(ffmpegInstallPlan(host({}), has("apt-get", "sudo"))?.display, "sudo apt-get install -y ffmpeg");
-  assert.equal(ffmpegInstallPlan(host({ isRoot: true }), has("apt-get"))?.display, "apt-get install -y ffmpeg");
+  assert.equal(ffmpegInstallPlan(host({}), has("apt-get", "sudo"))?.display, "sudo apt-get update && sudo apt-get install -y ffmpeg");
+  assert.equal(ffmpegInstallPlan(host({ isRoot: true }), has("apt-get"))?.display, "apt-get update && apt-get install -y ffmpeg");
   assert.equal(ffmpegInstallPlan(host({}), has("dnf", "sudo"))?.display, "sudo dnf install -y ffmpeg-free");
   assert.match(ffmpegInstallPlan(host({ platform: "win32" }), has("winget", "choco"))!.display, /^winget install --id Gyan\.FFmpeg/);
   assert.equal(ffmpegInstallPlan(host({ platform: "win32" }), has("choco"))?.via, "Chocolatey");

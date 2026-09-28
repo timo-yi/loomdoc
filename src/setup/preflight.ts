@@ -74,16 +74,31 @@ export async function runPreflight(
   return ready;
 }
 
-/** Terminal IO: prompts default to "no" so pressing Enter never installs anything. */
+/**
+ * Terminal IO: prompts default to "no" so pressing Enter never installs anything. Ctrl-D
+ * (closed input) also means "no"; Ctrl-C means "stop", exactly as it would anywhere else, so it
+ * never lets a run carry on into a download or a paid model call.
+ */
 export function terminalIO(): PreflightIO {
   return {
     write: (line) => process.stderr.write(`${line}\n`),
     confirm: async (question) => {
       const rl = createInterface({ input: process.stdin, output: process.stderr });
+      let interrupted = false;
+      // In raw mode the terminal does not raise SIGINT for Ctrl-C; readline reports it here.
+      rl.on("SIGINT", () => {
+        interrupted = true;
+        process.stderr.write("\n");
+        rl.close();
+        process.kill(process.pid, "SIGINT");
+      });
       try {
         const answer = (await rl.question(`${question} [y/N] `)).trim().toLowerCase();
         return answer === "y" || answer === "yes";
       } catch {
+        // If the process survives the re-raised SIGINT (a host app handles it), never resolve,
+        // so nothing after the prompt runs.
+        if (interrupted) return new Promise<boolean>(() => {});
         process.stderr.write("\n");
         return false; // Ctrl-D / closed input counts as "no"
       } finally {
