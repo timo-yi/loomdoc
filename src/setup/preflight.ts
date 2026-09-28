@@ -84,21 +84,18 @@ export function terminalIO(): PreflightIO {
     write: (line) => process.stderr.write(`${line}\n`),
     confirm: async (question) => {
       const rl = createInterface({ input: process.stdin, output: process.stderr });
-      let interrupted = false;
       // In raw mode the terminal does not raise SIGINT for Ctrl-C; readline reports it here.
+      // Exit directly with the conventional code: re-raising the signal is unreliable (a
+      // launcher such as tsx may handle it, and Windows can't re-raise). No run state exists
+      // yet at this point, so there is nothing to clean up.
       rl.on("SIGINT", () => {
-        interrupted = true;
         process.stderr.write("\n");
-        rl.close();
-        process.kill(process.pid, "SIGINT");
+        process.exit(130);
       });
       try {
         const answer = (await rl.question(`${question} [y/N] `)).trim().toLowerCase();
         return answer === "y" || answer === "yes";
       } catch {
-        // If the process survives the re-raised SIGINT (a host app handles it), never resolve,
-        // so nothing after the prompt runs.
-        if (interrupted) return new Promise<boolean>(() => {});
         process.stderr.write("\n");
         return false; // Ctrl-D / closed input counts as "no"
       } finally {

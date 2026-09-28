@@ -71,11 +71,16 @@ export function ffmpegRequirement(host: HostInfo): Requirement {
           fix: plan
             ? {
                 prompt: `Install ffmpeg with ${plan.via}? This runs: ${plan.display}`,
-                run: async () => {
+                run: async (log) => {
                   for (const step of plan.steps) {
                     const code = await runInteractive(step.command, step.args);
                     const shown = [step.command, ...step.args].join(" ");
-                    if (code !== 0) throw new Error(`${shown} exited with code ${code}`);
+                    if (code === 0) continue;
+                    if (step.optional) {
+                      log(`${shown} exited with code ${code}; continuing with the install.`);
+                      continue;
+                    }
+                    throw new Error(`${shown} exited with code ${code}`);
                   }
                 },
                 afterFixHint:
@@ -145,7 +150,10 @@ export function ytDlpRequirement(host: HostInfo, now: Date = new Date()): Requir
         managed
           ? "Update loomdoc's copy of yt-dlp to the latest release?"
           : "Install an up-to-date loomdoc-managed copy of yt-dlp? (Your system copy is left untouched; loomdoc will use its own.)",
-        `Update your yt-dlp (e.g. \`yt-dlp -U\`, \`brew upgrade yt-dlp\`, or \`pipx upgrade yt-dlp\`).`,
+        managed
+          ? "Run `loomdoc doctor` to update loomdoc's copy of yt-dlp."
+          : "Update your yt-dlp (e.g. `yt-dlp -U`, `brew upgrade yt-dlp`, or `pipx upgrade yt-dlp`), or run " +
+            "`loomdoc doctor` to install a loomdoc-managed copy.",
       );
     },
   };
