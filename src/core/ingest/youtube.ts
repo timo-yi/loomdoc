@@ -136,10 +136,11 @@ export async function fetchYouTubeVideo(url: string, scratchDir: string): Promis
     "--no-playlist",
     "--no-progress",
     "--no-warnings",
-    // Video only (loomdoc never uses audio), preferring the largest size up to 1080p and
-    // H.264, which every ffmpeg build decodes quickly.
+    // A video-only stream (loomdoc never uses audio), falling back to a combined one only if
+    // none exists; preferring the largest size up to 1080p and H.264, which every ffmpeg build
+    // decodes quickly.
     "-f",
-    "bv*/b",
+    "bv/b",
     "-S",
     "res:1080,vcodec:h264",
     "-o",

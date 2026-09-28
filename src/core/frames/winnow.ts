@@ -25,6 +25,8 @@ export interface CandidateFrame {
 }
 
 const HASH_CONCURRENCY = 8;
+/** Largest gap between samples at which consecutive-frame change still indicates motion. */
+export const MOTION_GATE_MAX_INTERVAL_SECONDS = 1;
 
 export async function winnowFrames(
   frames: SampledFrame[],
@@ -37,10 +39,14 @@ export async function winnowFrames(
   const n = frames.length;
 
   // moving[i]: the screen is actively changing between frame i and i+1. The last frame is
-  // settled by definition.
+  // settled by definition. Comparing neighbors only measures motion when they are close in
+  // time; at the low rates used for long videos, neighbors are seconds apart and almost always
+  // differ, so the gate would discard every screen seen in just one sample. There, every frame
+  // counts as settled and only the distinct-screen test below applies.
+  const gateMotion = 1 / options.sampleFps <= MOTION_GATE_MAX_INTERVAL_SECONDS;
   const moving: boolean[] = [];
   for (let i = 0; i < n - 1; i++) {
-    moving.push(changedFraction(signatures[i]!, signatures[i + 1]!, pixelDelta) > motionThreshold);
+    moving.push(gateMotion && changedFraction(signatures[i]!, signatures[i + 1]!, pixelDelta) > motionThreshold);
   }
   moving.push(false);
 

@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { LoomdocError } from "./errors.js";
+import { trackChild } from "./children.js";
 
 /**
  * Thin wrapper around the `ffmpeg` binary. loomdoc shells out to ffmpeg rather
@@ -10,7 +11,7 @@ import { LoomdocError } from "./errors.js";
 /** Run ffmpeg with the given args. Resolves on exit code 0, rejects otherwise. */
 export function runFfmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const proc = spawn("ffmpeg", args, { stdio: ["ignore", "ignore", "pipe"] });
+    const proc = trackChild(spawn("ffmpeg", args, { stdio: ["ignore", "ignore", "pipe"] }));
     let stderr = "";
     proc.stderr.on("data", (chunk) => {
       stderr += chunk.toString();
