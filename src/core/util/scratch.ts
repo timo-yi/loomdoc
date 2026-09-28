@@ -2,6 +2,7 @@ import { rmSync } from "node:fs";
 import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { killTrackedChildren } from "./children.js";
 
 /**
  * Per-run scratch directory (PRD decision D14).
@@ -9,13 +10,21 @@ import { join } from "node:path";
  * Holds the downloaded video, captions, and sampled frames: hundreds of MB for a long video,
  * so it must never accumulate. Three layers make sure it doesn't:
  *   1. `dispose()` removes it when the run ends (the pipeline calls it in a `finally`).
- *   2. While the run is live, SIGINT/SIGTERM and process exit remove it synchronously, so
- *      Ctrl-C does not leak it.
+ *   2. While the run is live, the terminating signals (Ctrl-C, SIGTERM, closing the terminal
+ *      window, Ctrl-Break on Windows) and process exit stop loomdoc's ffmpeg/yt-dlp children
+ *      and remove it synchronously.
  *   3. A hard kill (SIGKILL, power loss) can't be intercepted, so each new run sweeps any
  *      leftover scratch dirs older than STALE_AFTER_MS.
  */
 
 const PREFIX = "loomdoc-";
+/**
+ * Signals that end the process by default. SIGHUP is sent when the terminal window closes (and
+ * on Windows when the console closes); SIGBREAK is Ctrl-Break on Windows.
+ */
+const TERMINATING_SIGNALS: NodeJS.Signals[] =
+  process.platform === "win32" ? ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"] : ["SIGINT", "SIGTERM", "SIGHUP"];
+
 /** Old enough that no live run can still own it. */
 export const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 
@@ -30,6 +39,7 @@ export async function createScratchDir(baseDir: string = tmpdir()): Promise<Scra
   const path = await mkdtemp(join(baseDir, PREFIX));
 
   const removeSync = (): void => {
+    killTrackedChildren();
     try {
       rmSync(path, { recursive: true, force: true });
     } catch {
@@ -37,8 +47,7 @@ export async function createScratchDir(baseDir: string = tmpdir()): Promise<Scra
     }
   };
   const detach = (): void => {
-    process.off("SIGINT", onSignal);
-    process.off("SIGTERM", onSignal);
+    for (const signal of TERMINATING_SIGNALS) process.off(signal, onSignal);
     process.off("exit", removeSync);
   };
   // Clean up, then re-raise the signal with our handler gone so the process still terminates
@@ -49,8 +58,7 @@ export async function createScratchDir(baseDir: string = tmpdir()): Promise<Scra
     process.kill(process.pid, signal);
   };
 
-  process.on("SIGINT", onSignal);
-  process.on("SIGTERM", onSignal);
+  for (const signal of TERMINATING_SIGNALS) process.on(signal, onSignal);
   process.on("exit", removeSync);
 
   return {
