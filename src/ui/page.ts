@@ -108,13 +108,24 @@ export function pageHtml(token: string): string {
 `;
 }
 
-export function unauthorizedHtml(): string {
+const UNAUTHORIZED_REASONS = {
+  missing:
+    "This page needs the private link printed in the terminal where you ran <code>loomdoc ui</code>. " +
+    "Open that link (it changes every time loomdoc ui starts).",
+  invalid:
+    "That link doesn't match this loomdoc session. Open the link printed in the terminal where you ran " +
+    "<code>loomdoc ui</code> (it changes every time loomdoc ui starts).",
+  used:
+    "That link has already been used, and each link works only once. If you opened it in another browser, " +
+    "stop loomdoc ui in the terminal (Ctrl-C) and start it again to get a new link.",
+} as const;
+
+export function unauthorizedHtml(reason: keyof typeof UNAUTHORIZED_REASONS): string {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>loomdoc</title><link rel="stylesheet" href="/app.css"></head>
+<title>loomdoc</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/app.css"></head>
 <body><main><header class="masthead"><h1>loomdoc</h1></header>
-<p class="lede">This page needs the private link printed in the terminal where you ran <code>loomdoc ui</code>.
-Open that link (it changes every time loomdoc ui starts).</p></main></body></html>
+<p class="lede">${UNAUTHORIZED_REASONS[reason]}</p></main></body></html>
 `;
 }
 
@@ -450,10 +461,13 @@ export const APP_JS = `
       }
     };
     source.onerror = function () {
-      // The server closes the stream after the final event; only report a drop mid-run.
-      if (source.readyState === EventSource.CLOSED && currentRun && !currentRun.finished) {
+      // The client closes the stream itself on the final event, so any error before that means
+      // the loomdoc process stopped (Ctrl-C, terminal closed). Stop here rather than letting the
+      // browser retry forever behind a disabled form.
+      if (currentRun && !currentRun.finished) {
+        source.close();
         finish();
-        showError("Lost connection to loomdoc. Is it still running in your terminal?");
+        showError("Lost connection to loomdoc. Is it still running in your terminal? If you restarted it, open the new link it printed.");
       }
     };
   }

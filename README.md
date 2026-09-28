@@ -229,7 +229,9 @@ loomdoc doctor [--yes]   Check (and offer to install) everything loomdoc needs
 
 Every style produces the same kind of output (sections with screenshots), so Markdown, Word,
 and PDF all work with each. Guidance is applied on top of the style and wins where they
-conflict; it can't make the AI invent things the video doesn't show.
+conflict, but it can't make the AI invent facts: prices, metrics, customer names, dates and
+similar details appear only if the video shows or says them, or if you supply them in your
+guidance (for example, "our standard onboarding takes 2 weeks").
 
 With Option A, pass options after the `--`, e.g.
 `npm run dev -- <url> --preset training --guidance "Audience is new support hires" --formats markdown`.

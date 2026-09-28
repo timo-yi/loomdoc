@@ -70,7 +70,8 @@ installs of ffmpeg and the macOS/Windows paths are unit-tested but not run live.
 **Style presets and web UI (D16, D17):** the UI was exercised in headless Chromium (light,
 dark, and phone widths; no console errors, no horizontal overflow) and the real `loomdoc ui`
 command ran a real Loom through ingest and frame selection over the API, surfacing the
-generation error cleanly with a fake key. The presets' effect on real model output has **not**
+generation error cleanly with a fake key. After the first skeptic review, Chromium also confirmed the single-use
+launch link (clean address bar) and the "Lost connection" message when loomdoc stops mid-run. The presets' effect on real model output has **not**
 been evaluated yet: that needs a real API key and a side-by-side read of each preset.
 
 Follow-ups (not blockers): tune the frame thresholds and the `maxCandidates` cap against more

@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createReadStream } from "node:fs";
+import { pipeline } from "node:stream";
 import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -25,12 +26,18 @@ import { revealInFileManager } from "./open.js";
  * only listens on loopback:
  *   - Binds to 127.0.0.1 only, and rejects any Host header other than 127.0.0.1/localhost on
  *     its own port (blocks DNS-rebinding attacks from web pages).
- *   - A random per-launch token is required. The launch URL carries it once; the server trades
- *     it for an HttpOnly, SameSite=Strict cookie and redirects to a clean URL.
- *   - State-changing requests also need the token in an X-Loomdoc-Token header. Other web pages
- *     can't read the token and can't send that header cross-origin without a CORS preflight,
+ *   - The launch URL carries a random, single-use launch token. The first visit trades it for a
+ *     separate random session id in an HttpOnly, SameSite=Strict cookie and redirects to a clean
+ *     URL; the launch token is then dead, so a copy of the URL (browser argv visible to other
+ *     local users, shell history) is useless.
+ *   - State-changing requests also need a third random value, the request token, in an
+ *     X-Loomdoc-Token header. It is only ever delivered inside the page, so other web pages
+ *     can't read it, and they can't send that header cross-origin without a CORS preflight,
  *     which this server never approves.
- *   - A strict Content-Security-Policy; all script and style are served from the server itself.
+ *   - A strict Content-Security-Policy on the page; all script and style are served from the
+ *     server itself.
+ * Residual risk (PRD D17): browsers don't scope cookies by port, so another web server on
+ * 127.0.0.1 that the user browses to while loomdoc ui runs receives the session cookie.
  * One run at a time: runs are CPU-heavy and each one costs money.
  */
 
@@ -48,7 +55,7 @@ export interface UiServerOptions {
 }
 
 export interface UiServer {
-  /** The launch URL, including the one-time token. */
+  /** The launch URL, including the single-use launch token. */
   url: string;
   port: number;
   close(): Promise<void>;
@@ -99,10 +106,16 @@ interface RunRecord {
 const MAX_BODY_BYTES = 64 * 1024;
 
 export async function startUiServer(options: UiServerOptions = {}): Promise<UiServer> {
-  const token = randomBytes(32).toString("hex");
+  let launchToken: string | null = randomBytes(32).toString("hex");
+  const launchUrlToken = launchToken;
+  const sessionId = randomBytes(32).toString("hex");
+  const requestToken = randomBytes(32).toString("hex");
   const runner = options.run ?? runLoomdoc;
   const runs = new Map<string, RunRecord>();
   let activeRunId: string | null = null;
+  // The single run slot. Claimed synchronously, before any await, so concurrent requests can't
+  // all pass the check while the first one is still verifying requirements.
+  let slotTaken = false;
   let port = 0;
 
   const cookieName = (): string => `loomdoc_${port}`;
@@ -124,14 +137,19 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     const url = new URL(req.url ?? "/", `http://${host}`);
     const method = req.method ?? "GET";
 
-    // Launch URL: trade the one-time query token for a cookie, then drop it from the address bar.
+    const hasSession = safeEqual(readCookie(req, cookieName()) ?? "", sessionId);
+
+    // Launch URL: trade the single-use launch token for the session cookie, then drop it from
+    // the address bar. Revisiting the link from an already signed-in browser just continues.
     if (method === "GET" && url.pathname === "/" && url.searchParams.has("token")) {
-      if (!safeEqual(url.searchParams.get("token") ?? "", token)) {
-        sendHtml(res, 401, unauthorizedHtml());
+      const valid = launchToken !== null && safeEqual(url.searchParams.get("token") ?? "", launchToken);
+      if (!valid && !hasSession) {
+        sendHtml(res, 401, unauthorizedHtml(launchToken === null ? "used" : "invalid"));
         return;
       }
+      launchToken = null;
       res.writeHead(303, {
-        "Set-Cookie": `${cookieName()}=${token}; HttpOnly; SameSite=Strict; Path=/`,
+        "Set-Cookie": `${cookieName()}=${sessionId}; HttpOnly; SameSite=Strict; Path=/`,
         Location: "/",
       });
       res.end();
@@ -142,8 +160,8 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     if (method === "GET" && url.pathname === "/favicon.svg") return sendText(res, 200, FAVICON_SVG, "image/svg+xml");
     if (method === "GET" && url.pathname === "/app.css") return sendText(res, 200, APP_CSS, "text/css; charset=utf-8");
 
-    if (!safeEqual(readCookie(req, cookieName()) ?? "", token)) {
-      if (method === "GET" && url.pathname === "/") sendHtml(res, 401, unauthorizedHtml());
+    if (!hasSession) {
+      if (method === "GET" && url.pathname === "/") sendHtml(res, 401, unauthorizedHtml("missing"));
       else sendJson(res, 401, { error: "Not authorized. Open the link printed in your terminal." });
       return;
     }
@@ -154,14 +172,14 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
         sendJson(res, 403, { error: "Cross-origin request refused." });
         return;
       }
-      if (!safeEqual(String(req.headers["x-loomdoc-token"] ?? ""), token)) {
+      if (!safeEqual(String(req.headers["x-loomdoc-token"] ?? ""), requestToken)) {
         sendJson(res, 403, { error: "Missing or invalid request token." });
         return;
       }
     }
 
     // --- routes ------------------------------------------------------------------------
-    if (method === "GET" && url.pathname === "/") return sendHtml(res, 200, pageHtml(token));
+    if (method === "GET" && url.pathname === "/") return sendHtml(res, 200, pageHtml(requestToken));
     if (method === "GET" && url.pathname === "/app.js") return sendText(res, 200, APP_JS, "text/javascript; charset=utf-8");
     if (method === "GET" && url.pathname === "/api/config") {
       sendJson(res, 200, {
@@ -191,10 +209,11 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
         sendJson(res, 400, { error: "The Custom style needs guidance describing the document you want." });
         return;
       }
-      if (activeRunId) {
+      if (slotTaken) {
         sendJson(res, 409, { error: "A document is already being generated. Wait for it to finish." });
         return;
       }
+      slotTaken = true;
       let problems: string[];
       try {
         problems = options.checkRequirements ? await options.checkRequirements(body.url) : [];
@@ -202,6 +221,7 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
         problems = [err instanceof Error ? err.message : String(err)];
       }
       if (problems.length > 0) {
+        slotTaken = false;
         sendJson(res, 412, { error: problems.join("\n") });
         return;
       }
@@ -209,7 +229,7 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       const record: RunRecord = { id: randomUUID(), status: "running", events: [], listeners: new Set() };
       runs.set(record.id, record);
       activeRunId = record.id;
-      void execute(record, body);
+      void execute(record, body); // releases the slot when the run ends
       sendJson(res, 202, { id: record.id });
       return;
     }
@@ -272,6 +292,7 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       emit({ type: "error", message: err instanceof Error ? err.message : String(err), at: Date.now() });
     } finally {
       activeRunId = null;
+      slotTaken = false;
     }
   }
 
@@ -282,7 +303,7 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
   port = (server.address() as AddressInfo).port;
 
   return {
-    url: `http://127.0.0.1:${port}/?token=${token}`,
+    url: `http://127.0.0.1:${port}/?token=${launchUrlToken}`,
     port,
     close: () =>
       new Promise<void>((resolveClose) => {
@@ -375,19 +396,24 @@ export async function serveOutputFile(res: ServerResponse, outputDir: string, en
     headers["Content-Disposition"] = `attachment; filename="${encodeURIComponent(rel.split(sep).pop()!)}"`;
   }
   res.writeHead(200, headers);
-  createReadStream(target).pipe(res);
+  // pipeline() destroys both streams on error; an unhandled stream error would crash the server.
+  pipeline(createReadStream(target), res, () => {});
 }
 
 function setSecurityHeaders(res: ServerResponse): void {
-  res.setHeader(
-    "Content-Security-Policy",
-    "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; " +
-      "form-action 'none'; base-uri 'none'; frame-ancestors 'none'",
-  );
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("Cache-Control", "no-store");
 }
+
+/**
+ * CSP for the app's own HTML pages only. Output files (images, Markdown, PDF) never carry it:
+ * a policy on a PDF response blocks the browser's built-in PDF viewer, and none of those types
+ * can run script.
+ */
+const PAGE_CSP =
+  "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; " +
+  "form-action 'none'; base-uri 'none'; frame-ancestors 'none'";
 
 function safeEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a);
@@ -423,6 +449,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 function sendHtml(res: ServerResponse, status: number, html: string): void {
+  res.setHeader("Content-Security-Policy", PAGE_CSP);
   sendText(res, status, html, "text/html; charset=utf-8");
 }
 

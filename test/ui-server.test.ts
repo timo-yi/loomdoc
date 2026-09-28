@@ -30,7 +30,11 @@ function send(port: number, path: string, opts: { method?: string; headers?: Rec
   });
 }
 
-async function setup(run?: (o: LoomdocOptions) => Promise<LoomdocResult>, problems: string[] = []) {
+async function setup(
+  run?: (o: LoomdocOptions) => Promise<LoomdocResult>,
+  problems: string[] = [],
+  checkDelayMs = 0,
+) {
   const dir = await mkdtemp(join(tmpdir(), "loomdoc-ui-test-"));
   const outputDir = join(dir, "my-doc");
   await mkdir(join(outputDir, "images"), { recursive: true });
@@ -57,11 +61,20 @@ async function setup(run?: (o: LoomdocOptions) => Promise<LoomdocResult>, proble
       };
     });
 
-  const server = await startUiServer({ run: fakeRun, checkRequirements: async () => problems });
-  const token = new URL(server.url).searchParams.get("token")!;
-  const boot = await send(server.port, `/?token=${token}`);
+  const server = await startUiServer({
+    run: fakeRun,
+    checkRequirements: async () => {
+      if (checkDelayMs) await new Promise((r) => setTimeout(r, checkDelayMs));
+      return problems;
+    },
+  });
+  const launchToken = new URL(server.url).searchParams.get("token")!;
+  const boot = await send(server.port, `/?token=${launchToken}`);
   const cookie = String(boot.headers["set-cookie"]).split(";")[0]!;
-  return { dir, server, token, cookie, boot, calls };
+  // The request token for POSTs is delivered only inside the page.
+  const page = await send(server.port, "/", { headers: { cookie } });
+  const token = /name="loomdoc-token" content="([0-9a-f]+)"/.exec(page.body)![1]!;
+  return { dir, server, launchToken, token, cookie, boot, outputDir, calls };
 }
 
 const runBody = JSON.stringify({ url: "https://www.loom.com/share/abc", preset: "sales-walkthrough", guidance: "Focus on reporting", formats: ["markdown"] });
@@ -90,8 +103,13 @@ test("launch link trades the token for a strict cookie and redirects", async () 
     assert.match(String(s.boot.headers["set-cookie"]), /HttpOnly; SameSite=Strict; Path=\//);
     const page = await send(s.server.port, "/", { headers: { cookie: s.cookie } });
     assert.equal(page.status, 200);
-    assert.match(page.body, new RegExp(`content="${s.token}"`));
     assert.match(String(page.headers["content-security-policy"]), /script-src 'self'/);
+    // Three separate secrets: the launch token, the session cookie, and the request token.
+    const cookieValue = s.cookie.split("=")[1]!;
+    assert.notEqual(cookieValue, s.launchToken);
+    assert.notEqual(s.token, s.launchToken);
+    assert.notEqual(s.token, cookieValue);
+    assert.doesNotMatch(page.body, new RegExp(s.launchToken));
   } finally {
     await s.server.close();
     await rm(s.dir, { recursive: true, force: true });
@@ -103,6 +121,7 @@ test("rejects requests without the token, with a wrong token, or with a foreign 
   try {
     assert.equal((await send(s.server.port, "/")).status, 401);
     assert.equal((await send(s.server.port, "/?token=wrong")).status, 401);
+    assert.equal((await send(s.server.port, "/api/config", { headers: { cookie: `loomdoc_${s.server.port}=${s.launchToken}` } })).status, 401);
     assert.equal((await send(s.server.port, "/api/config")).status, 401);
     assert.equal((await send(s.server.port, "/api/config", { headers: { cookie: "loomdoc_1=nope" } })).status, 401);
     // DNS rebinding: a page on evil.example resolving to 127.0.0.1 sends its own Host.
@@ -210,4 +229,75 @@ test("the page script is valid JavaScript and never uses innerHTML", async () =>
   const { APP_JS } = await import("../src/ui/page.js");
   assert.doesNotThrow(() => new Script(APP_JS));
   assert.doesNotMatch(APP_JS, /innerHTML/);
+});
+
+test("the launch link works once; the signed-in browser can revisit it", async () => {
+  const s = await setup();
+  try {
+    const again = await send(s.server.port, `/?token=${s.launchToken}`);
+    assert.equal(again.status, 401);
+    assert.match(again.body, /already been used/);
+    const sameBrowser = await send(s.server.port, `/?token=${s.launchToken}`, { headers: { cookie: s.cookie } });
+    assert.equal(sameBrowser.status, 303);
+  } finally {
+    await s.server.close();
+    await rm(s.dir, { recursive: true, force: true });
+  }
+});
+
+test("simultaneous submissions start exactly one run", async () => {
+  let started = 0;
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  const slow = async (): Promise<LoomdocResult> => {
+    started++;
+    await gate;
+    throw new Error("stopped");
+  };
+  // A slow requirements check widens the window the old check-then-set race lived in.
+  const s = await setup(slow, [], 50);
+  try {
+    const replies = await Promise.all([postRun(s), postRun(s), postRun(s)]);
+    assert.deepEqual(replies.map((r) => r.status).sort(), [202, 409, 409]);
+    assert.equal(started, 1);
+    release();
+  } finally {
+    await s.server.close();
+    await rm(s.dir, { recursive: true, force: true });
+  }
+});
+
+test("a failed requirements check releases the run slot", async () => {
+  const s = await setup(undefined, ["ffmpeg is missing."]);
+  try {
+    assert.equal((await postRun(s)).status, 412);
+    assert.equal((await postRun(s)).status, 412, "not 409: the slot was released");
+  } finally {
+    await s.server.close();
+    await rm(s.dir, { recursive: true, force: true });
+  }
+});
+
+test("output files are served without the page CSP, and a read error doesn't crash the server", { skip: process.platform !== "linux" }, async () => {
+  const s = await setup();
+  try {
+    const res = await postRun(s);
+    const { id } = JSON.parse(res.body) as { id: string };
+    await waitForEvents(s, id);
+
+    const md = await send(s.server.port, `/files/${id}/document.md`, { headers: { cookie: s.cookie } });
+    assert.equal(md.status, 200);
+    assert.equal(md.headers["content-security-policy"], undefined);
+    assert.equal(md.headers["x-content-type-options"], "nosniff");
+
+    // stat() reports a regular file but reading it fails (EIO).
+    const { symlink } = await import("node:fs/promises");
+    await symlink("/proc/self/mem", join(s.outputDir, "broken.md"));
+    await send(s.server.port, `/files/${id}/broken.md`, { headers: { cookie: s.cookie } }).catch(() => undefined);
+    const alive = await send(s.server.port, "/api/config", { headers: { cookie: s.cookie } });
+    assert.equal(alive.status, 200, "server survived the stream error");
+  } finally {
+    await s.server.close();
+    await rm(s.dir, { recursive: true, force: true });
+  }
 });

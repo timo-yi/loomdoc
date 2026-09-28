@@ -98,11 +98,23 @@ test("buildSystemPrompt applies the preset and appends the user's guidance last"
   assert.match(prompt, /Never invent pricing/);
   assert.match(prompt, /Audience: CFO/);
   assert.match(prompt, /<direction>\nEmphasize reporting\.\n<\/direction>$/);
-  assert.match(prompt, /never overrides the screenshot-id rules/i);
+  assert.match(prompt, /never overrides the rules at the top/i);
 });
 
 test("every preset produces a distinct prompt", async () => {
   const { STYLE_PRESET_IDS } = await import("../src/core/generate/styles.js");
   const prompts = new Set(STYLE_PRESET_IDS.map((preset) => buildSystemPrompt({ preset })));
   assert.equal(prompts.size, STYLE_PRESET_IDS.length);
+});
+
+test("the no-invented-facts rule is fixed, sits above guidance, and survives every preset", async () => {
+  const { STYLE_PRESET_IDS } = await import("../src/core/generate/styles.js");
+  for (const preset of STYLE_PRESET_IDS) {
+    const prompt = buildSystemPrompt({ preset, guidance: "Make it persuasive with concrete ROI numbers and customer examples." });
+    const rule = prompt.indexOf("Never state specific facts");
+    const direction = prompt.indexOf("<direction>");
+    assert.ok(rule >= 0, `${preset}: grounding rule present`);
+    assert.ok(rule < direction, `${preset}: grounding rule comes before the user's direction`);
+    assert.match(prompt, /not stating facts that are absent from the video and this direction/);
+  }
 });
