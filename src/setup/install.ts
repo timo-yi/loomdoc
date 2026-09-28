@@ -20,9 +20,14 @@ import type { HostInfo } from "./platform.js";
 
 // --- ffmpeg via the system package manager ----------------------------------------------
 
-export interface CommandPlan {
+export interface CommandStep {
   command: string;
   args: string[];
+}
+
+export interface CommandPlan {
+  /** Run in order; the install stops at the first step that fails. */
+  steps: CommandStep[];
   /** Human-readable form shown in the consent prompt. */
   display: string;
   /** e.g. "Homebrew". */
@@ -32,36 +37,38 @@ export interface CommandPlan {
 interface ManagerSpec {
   via: string;
   command: string;
-  args: string[];
+  /** Argument lists for each invocation of `command`. */
+  steps: string[][];
   sudo: boolean;
 }
 
 const FFMPEG_MANAGERS: Partial<Record<NodeJS.Platform, ManagerSpec[]>> = {
   darwin: [
-    { via: "Homebrew", command: "brew", args: ["install", "ffmpeg"], sudo: false },
-    { via: "MacPorts", command: "port", args: ["install", "ffmpeg"], sudo: true },
+    { via: "Homebrew", command: "brew", steps: [["install", "ffmpeg"]], sudo: false },
+    { via: "MacPorts", command: "port", steps: [["install", "ffmpeg"]], sudo: true },
   ],
   win32: [
     {
       via: "winget",
       command: "winget",
-      args: ["install", "--id", "Gyan.FFmpeg", "-e", "--accept-source-agreements", "--accept-package-agreements"],
+      steps: [["install", "--id", "Gyan.FFmpeg", "-e", "--accept-source-agreements", "--accept-package-agreements"]],
       sudo: false,
     },
-    { via: "Scoop", command: "scoop", args: ["install", "ffmpeg"], sudo: false },
-    { via: "Chocolatey", command: "choco", args: ["install", "ffmpeg", "-y"], sudo: false },
+    { via: "Scoop", command: "scoop", steps: [["install", "ffmpeg"]], sudo: false },
+    { via: "Chocolatey", command: "choco", steps: [["install", "ffmpeg", "-y"]], sudo: false },
   ],
   linux: [
-    { via: "apt", command: "apt-get", args: ["install", "-y", "ffmpeg"], sudo: true },
+    // Fresh systems and containers often ship with empty package lists, so refresh them first.
+    { via: "apt", command: "apt-get", steps: [["update"], ["install", "-y", "ffmpeg"]], sudo: true },
     // Stock Fedora ships ffmpeg as "ffmpeg-free"; the full build needs RPM Fusion.
-    { via: "dnf", command: "dnf", args: ["install", "-y", "ffmpeg-free"], sudo: true },
-    { via: "pacman", command: "pacman", args: ["-S", "--needed", "--noconfirm", "ffmpeg"], sudo: true },
-    { via: "apk", command: "apk", args: ["add", "ffmpeg"], sudo: true },
+    { via: "dnf", command: "dnf", steps: [["install", "-y", "ffmpeg-free"]], sudo: true },
+    { via: "pacman", command: "pacman", steps: [["-S", "--needed", "--noconfirm", "ffmpeg"]], sudo: true },
+    { via: "apk", command: "apk", steps: [["add", "--no-cache", "ffmpeg"]], sudo: true },
   ],
 };
 
 /**
- * The command that installs ffmpeg on this host, or null if no supported package manager is
+ * The commands that install ffmpeg on this host, or null if no supported package manager is
  * present (or root is needed and neither root nor sudo is available).
  */
 export function ffmpegInstallPlan(host: HostInfo, has: (command: string) => boolean): CommandPlan | null {
@@ -69,9 +76,11 @@ export function ffmpegInstallPlan(host: HostInfo, has: (command: string) => bool
     if (!has(spec.command)) continue;
     const useSudo = spec.sudo && !host.isRoot;
     if (useSudo && !has("sudo")) continue;
-    const command = useSudo ? "sudo" : spec.command;
-    const args = useSudo ? [spec.command, ...spec.args] : spec.args;
-    return { command, args, display: [command, ...args].join(" "), via: spec.via };
+    const steps = spec.steps.map((args) =>
+      useSudo ? { command: "sudo", args: [spec.command, ...args] } : { command: spec.command, args },
+    );
+    const display = steps.map((st) => [st.command, ...st.args].join(" ")).join(" && ");
+    return { steps, display, via: spec.via };
   }
   return null;
 }

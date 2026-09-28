@@ -96,7 +96,7 @@ echo $ANTHROPIC_API_KEY   # should print your key, not an empty line
 **e) Check everything at once (optional).** After step 2, run `loomdoc doctor` (or
 `npm run dev -- doctor`). It lists what is installed, and for anything missing it explains the
 problem and asks before installing it. Nothing is installed unless you answer `y`; pressing
-Enter means no. Every normal run does the same check for just what that run needs.
+Enter means no, and Ctrl-C stops loomdoc. Every normal run does the same check for just what that run needs.
 
 ### 2. Get loomdoc
 

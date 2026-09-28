@@ -72,8 +72,11 @@ export function ffmpegRequirement(host: HostInfo): Requirement {
             ? {
                 prompt: `Install ffmpeg with ${plan.via}? This runs: ${plan.display}`,
                 run: async () => {
-                  const code = await runInteractive(plan.command, plan.args);
-                  if (code !== 0) throw new Error(`${plan.display} exited with code ${code}`);
+                  for (const step of plan.steps) {
+                    const code = await runInteractive(step.command, step.args);
+                    const shown = [step.command, ...step.args].join(" ");
+                    if (code !== 0) throw new Error(`${shown} exited with code ${code}`);
+                  }
                 },
                 afterFixHint:
                   host.platform === "win32"
