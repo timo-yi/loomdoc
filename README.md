@@ -181,6 +181,14 @@ out/<video-title>/
 Open `document.md` (or the `.docx` / `.pdf`) and review it. The Markdown file references images
 in the adjacent `images/` folder, so keep them together if you move the `.md`.
 
+**The PDF is "pageless" by default:** one continuous page with no page breaks, like Google
+Docs' pageless mode, so screenshots never leave awkward gaps. It opens zoomed to the page width.
+(Very long documents become a few tall pages, split only between steps, because Adobe Acrobat
+can't open pages taller than 200 inches.) To print, choose `--pdf-layout paged` (or "Pages" in
+the UI): Letter pages that keep each step's heading with its screenshot and caption, and shrink
+a screenshot slightly when that lets it finish a page. The Word file uses the same "keep with
+next" rule, so headings and captions never get stranded at a page break.
+
 ---
 
 ## Options
@@ -190,6 +198,8 @@ loomdoc <loom-or-youtube-url> [options]
 
   --out <dir>        Output root directory (default: ./out)
   --formats <list>   Comma-separated: markdown,docx,pdf (default: all three)
+  --pdf-layout <l>   pageless (one continuous page, for screens) | paged (Letter pages,
+                     for printing). Default: pageless
   --model <id>       Model id (default: claude-sonnet-5)
   --effort <level>   low|medium|high|xhigh|max (default: medium)
 

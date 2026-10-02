@@ -102,7 +102,7 @@ export async function runLoomdoc(options: LoomdocOptions): Promise<LoomdocResult
 
     // 5. Render to each requested format off the one structured document.
     progress("render", `Rendering ${formats.join(", ")}`);
-    const files = await renderAll(doc, outputDir, formats, IMAGES_DIR);
+    const files = await renderAll(doc, outputDir, formats, IMAGES_DIR, options.pdfLayout);
 
     return { doc, outputDir, imagesDir, files };
   } finally {

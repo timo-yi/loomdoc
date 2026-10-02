@@ -19,6 +19,8 @@ Usage:
 Options:
   --out <dir>        Output root directory (default: ./out)
   --formats <list>   Comma-separated: markdown,docx,pdf (default: all three)
+  --pdf-layout <l>   pageless (one continuous page, for screens) | paged (Letter pages,
+                     for printing). Default: pageless
   --model <id>       Model id (default: claude-sonnet-5)
   --effort <level>   low|medium|high|xhigh|max (default: medium)
 
@@ -51,6 +53,7 @@ async function main(): Promise<void> {
     options: {
       out: { type: "string" },
       formats: { type: "string" },
+      "pdf-layout": { type: "string" },
       model: { type: "string" },
       effort: { type: "string" },
       role: { type: "string" },
@@ -104,6 +107,11 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  const pdfLayout = values["pdf-layout"];
+  if (pdfLayout !== undefined && pdfLayout !== "pageless" && pdfLayout !== "paged") {
+    throw new Error(`Unknown --pdf-layout "${pdfLayout}". Choose pageless or paged.`);
+  }
+
   const formats = values.formats
     ? (values.formats.split(",").map((f) => f.trim()).filter(Boolean) as OutputFormat[])
     : undefined;
@@ -124,6 +132,7 @@ async function main(): Promise<void> {
     url,
     outDir: values.out,
     formats,
+    pdfLayout,
     model: values.model,
     effort: values.effort as Effort | undefined,
     context,

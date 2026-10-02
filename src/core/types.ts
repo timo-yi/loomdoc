@@ -57,6 +57,12 @@ export interface DocContext {
 
 export type OutputFormat = "markdown" | "docx" | "pdf";
 
+/**
+ * PDF page layout (PRD decision D18): "pageless" is one continuous page with no breaks (for
+ * reading on screen); "paged" is US Letter pages (for printing).
+ */
+export type PdfLayout = "pageless" | "paged";
+
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
 /**
@@ -92,6 +98,8 @@ export interface LoomdocOptions {
   outDir?: string;
   /** Which document formats to produce. Default: all three. */
   formats?: OutputFormat[];
+  /** PDF layout. Default "pageless". */
+  pdfLayout?: PdfLayout;
   /** Model id for the doc-generation step. Default "claude-sonnet-5". */
   model?: string;
   /** Reasoning effort. Default "medium". */
@@ -139,4 +147,5 @@ export const DEFAULT_FRAME_OPTIONS: FrameOptions = {
 export const DEFAULT_MODEL = "claude-sonnet-5";
 export const DEFAULT_EFFORT: Effort = "medium";
 export const DEFAULT_FORMATS: OutputFormat[] = ["markdown", "docx", "pdf"];
+export const DEFAULT_PDF_LAYOUT: PdfLayout = "pageless";
 export const DEFAULT_MAX_FRAME_REQUESTS = 10;
