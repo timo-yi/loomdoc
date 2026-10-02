@@ -120,3 +120,25 @@ test("the no-invented-facts rule is fixed, sits above guidance, and survives eve
     assert.match(prompt, /the video title, the context supplied below, or the direction/);
   }
 });
+
+test("the prompt bans em dashes and contains none itself", async () => {
+  const { STYLE_PRESET_IDS } = await import("../src/core/generate/styles.js");
+  for (const preset of STYLE_PRESET_IDS) {
+    const prompt = buildSystemPrompt({ preset, guidance: "Keep it short." });
+    assert.match(prompt, /Never use em dashes anywhere in the output/);
+    assert.doesNotMatch(prompt, /\u2014/, `${preset}: the prompt must not model the dash it bans`);
+  }
+  const { z } = await import("zod");
+  const { loomDocSchema } = await import("../src/core/generate/schema.js");
+  assert.doesNotMatch(JSON.stringify(z.toJSONSchema(loomDocSchema)), /\u2014/, "schema descriptions reach the model too");
+
+  // loomdoc's own framing around the transcript reaches the model as well (the transcript and
+  // title themselves are the user's content and are left as they are).
+  const parts = await buildUserContent(
+    { source: "loom", id: "v", title: "Demo", durationSeconds: 4, videoPath: "/tmp/v.mkv", transcript: [{ start: 0, end: 2, text: "Hello" }] },
+    [],
+  );
+  for (const part of parts) {
+    if (part.type === "text") assert.doesNotMatch(part.text, /\u2014/, "user-message framing must not model the dash");
+  }
+});
