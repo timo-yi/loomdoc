@@ -84,3 +84,39 @@ test("buildUserContent lays out transcript then one image per candidate", async 
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("buildSystemPrompt defaults to the how-to preset", () => {
+  const prompt = buildSystemPrompt();
+  assert.match(prompt, /into a clear, step-by-step how-to document/);
+  assert.match(prompt, /Document type: How-to documentation/);
+  assert.doesNotMatch(prompt, /<direction>/);
+});
+
+test("buildSystemPrompt applies the preset and appends the user's guidance last", () => {
+  const prompt = buildSystemPrompt({ preset: "sales-walkthrough", guidance: "  Emphasize reporting.  ", audience: "CFO" });
+  assert.match(prompt, /guided product tour written for a prospect or customer/);
+  assert.match(prompt, /Never invent pricing/);
+  assert.match(prompt, /Audience: CFO/);
+  assert.match(prompt, /<direction>\nEmphasize reporting\.\n<\/direction>$/);
+  assert.match(prompt, /never overrides the rules at the top/i);
+});
+
+test("every preset produces a distinct prompt", async () => {
+  const { STYLE_PRESET_IDS } = await import("../src/core/generate/styles.js");
+  const prompts = new Set(STYLE_PRESET_IDS.map((preset) => buildSystemPrompt({ preset })));
+  assert.equal(prompts.size, STYLE_PRESET_IDS.length);
+});
+
+test("the no-invented-facts rule is fixed, sits above guidance, and survives every preset", async () => {
+  const { STYLE_PRESET_IDS } = await import("../src/core/generate/styles.js");
+  for (const preset of STYLE_PRESET_IDS) {
+    const prompt = buildSystemPrompt({ preset, guidance: "Make it persuasive with concrete ROI numbers and customer examples." });
+    const rule = prompt.indexOf("Never state specific facts");
+    const direction = prompt.indexOf("<direction>");
+    assert.ok(rule >= 0, `${preset}: grounding rule present`);
+    assert.ok(rule < direction, `${preset}: grounding rule comes before the user's direction`);
+    assert.match(prompt, /not stating facts that are absent from the video, its title, the supplied context, and this direction/);
+    // Supplied context (e.g. the prospect's company name) and the title are legitimate sources.
+    assert.match(prompt, /the video title, the context supplied below, or the direction/);
+  }
+});

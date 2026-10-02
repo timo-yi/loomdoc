@@ -17,8 +17,8 @@ export const screenshotSchema = z.object({
 });
 
 export const stepSchema = z.object({
-  heading: z.string().min(1).describe("Short title for this step."),
-  body: z.string().describe("The instruction/explanation for this step, in the target voice."),
+  heading: z.string().min(1).describe("Short title for this step (a section of the document)."),
+  body: z.string().describe("The content of this step, in the target document type and voice."),
   screenshot: screenshotSchema
     .optional()
     .describe("Include only when a screenshot genuinely helps this step."),
@@ -32,7 +32,7 @@ export const stepSchema = z.object({
 
 export const loomDocSchema = z.object({
   title: z.string().min(1),
-  overview: z.string().describe("A short orientation paragraph for the whole walkthrough."),
+  overview: z.string().describe("A short orientation paragraph for the whole document."),
   audience: z.string().describe("Who this doc is for — supplied context or inferred from the video."),
   steps: z.array(stepSchema).min(1),
 });

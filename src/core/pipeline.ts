@@ -11,6 +11,7 @@ import {
   type LoomdocResult,
   type Screenshot,
   type FrameOptions,
+  type ProgressStage,
   type Step,
 } from "./types.js";
 import { assertFfmpegAvailable } from "./util/ffmpeg.js";
@@ -21,7 +22,7 @@ import { fetchVideo } from "./ingest/index.js";
 import { sampleFrames } from "./frames/sample.js";
 import { winnowFrames } from "./frames/winnow.js";
 import { extractFrameAt } from "./frames/extract.js";
-import { generateDoc } from "./generate/generate.js";
+import { formatTs, generateDoc } from "./generate/generate.js";
 import type { LoomDocOutput } from "./generate/schema.js";
 import { renderAll } from "./render/index.js";
 
@@ -39,6 +40,7 @@ export async function runLoomdoc(options: LoomdocOptions): Promise<LoomdocResult
   const formats = options.formats ?? DEFAULT_FORMATS;
   const maxFrameRequests = options.maxFrameRequests ?? DEFAULT_MAX_FRAME_REQUESTS;
   const outRoot = resolve(options.outDir ?? "out");
+  const progress = (stage: ProgressStage, message: string): void => options.onProgress?.({ stage, message });
 
   // Fail early and clearly if ffmpeg is missing.
   await assertFfmpegAvailable();
@@ -48,7 +50,12 @@ export async function runLoomdoc(options: LoomdocOptions): Promise<LoomdocResult
   const scratch = await createScratchDir();
   try {
     // 1. Ingest: timestamped transcript + the video track, downloaded to local disk.
+    progress("ingest", "Fetching the transcript and downloading the video");
     const video = await fetchVideo(options.url, scratch.path);
+    progress(
+      "ingest",
+      `Got "${video.title}" (${formatTs(video.durationSeconds)}, ${video.transcript.length} transcript lines)`,
+    );
     const frames = frameOptionsFor(video.durationSeconds, options.frames);
 
     // Output layout: out/<slug>/{document.*, images/}.
@@ -59,8 +66,10 @@ export async function runLoomdoc(options: LoomdocOptions): Promise<LoomdocResult
     await mkdir(framesDir, { recursive: true });
 
     // 2. Frame track (the only deterministic step): sample -> winnow to distinct screens.
+    progress("frames", "Sampling frames and picking distinct screens");
     const sampled = await sampleFrames(video.videoPath, framesDir, frames.sampleFps);
     const candidates = await winnowFrames(sampled, frames);
+    progress("frames", `Picked ${candidates.length} candidate screenshots from ${sampled.length} frames`);
 
     // 3. Generate: the vision LLM makes every judgment call and may request extra
     //    exact-timestamp frames via the tool below (capped). The model references all
@@ -71,10 +80,12 @@ export async function runLoomdoc(options: LoomdocOptions): Promise<LoomdocResult
         throw new LoomdocError(`Exceeded maxFrameRequests (${maxFrameRequests}).`);
       }
       frameRequests += 1;
+      progress("generate", `The model asked for the frame at ${formatTs(timestampSeconds)}`);
       const out = join(framesDir, `fetched-${timestampSeconds.toFixed(2)}.png`);
       return extractFrameAt(video.videoPath, timestampSeconds, out);
     };
 
+    progress("generate", `Writing the document with ${model} (${effort} effort)`);
     const { doc: output, frames: frameFiles } = await generateDoc({
       video,
       candidates,
@@ -90,6 +101,7 @@ export async function runLoomdoc(options: LoomdocOptions): Promise<LoomdocResult
     const doc = await materializeScreenshots(output, frameFiles, imagesDir);
 
     // 5. Render to each requested format off the one structured document.
+    progress("render", `Rendering ${formats.join(", ")}`);
     const files = await renderAll(doc, outputDir, formats, IMAGES_DIR);
 
     return { doc, outputDir, imagesDir, files };
