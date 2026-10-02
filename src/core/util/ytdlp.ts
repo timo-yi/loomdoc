@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { LoomdocError } from "./errors.js";
+import { installedManagedTool, toolCommand } from "./tools.js";
 import { trackChild } from "./children.js";
 import { ytDlpConfigPath } from "./paths.js";
 
@@ -9,17 +10,22 @@ import { ytDlpConfigPath } from "./paths.js";
  *
  * YouTube deliberately obfuscates its stream and caption URLs and changes the scheme often;
  * yt-dlp is the maintained client that keeps up. Shelling out to it (like ffmpeg) keeps that
- * churn out of this codebase: when YouTube changes, users run `yt-dlp -U`.
+ * churn out of this codebase: when YouTube changes, `loomdoc doctor` updates yt-dlp.
  *
  * The user's general yt-dlp config is ignored: settings meant for their own downloads (an
  * archive file, audio extraction, chapter splitting) would silently break loomdoc's. Cookies and
  * network settings go in loomdoc's own yt-dlp config file instead (see `ytDlpConfigPath`).
+ *
+ * loomdoc-managed copies of yt-dlp and Deno (PRD D15) are used when installed; yt-dlp is
+ * pointed at the managed Deno explicitly, since it is not on PATH.
  */
 
 /** Run yt-dlp and resolve with its stdout. Rejects with an actionable LoomdocError. */
 export function runYtDlp(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    const proc = trackChild(spawn("yt-dlp", [...configArgs(), ...args], { stdio: ["ignore", "pipe", "pipe"] }));
+    const proc = trackChild(
+      spawn(toolCommand("yt-dlp"), [...configArgs(), ...runtimeArgs(), ...args], { stdio: ["ignore", "pipe", "pipe"] }),
+    );
     let stdout = "";
     let stderr = "";
     proc.stdout.on("data", (chunk) => {
@@ -31,8 +37,8 @@ export function runYtDlp(args: string[]): Promise<string> {
     proc.on("error", (err) => {
       reject(
         new LoomdocError(
-          `Failed to launch yt-dlp, which loomdoc needs for YouTube videos. Is it installed and ` +
-            `on PATH? (${err.message})`,
+          `Failed to launch yt-dlp, which loomdoc needs for YouTube videos. Run \`loomdoc doctor\` ` +
+            `to install it. (${err.message})`,
         ),
       );
     });
@@ -41,6 +47,11 @@ export function runYtDlp(args: string[]): Promise<string> {
       else reject(new LoomdocError(describeYtDlpFailure(stderr, code)));
     });
   });
+}
+
+function runtimeArgs(): string[] {
+  const deno = installedManagedTool("deno");
+  return deno ? ["--js-runtimes", `deno:${deno}`] : [];
 }
 
 /** Config isolation: only loomdoc's own yt-dlp config file, if the user created one. */
@@ -69,10 +80,10 @@ export function describeYtDlpFailure(stderr: string, code: number | null): strin
       `to loomdoc's yt-dlp config file (${ytDlpConfigPath()}).`;
   } else if (/private video|members-only|join this channel/i.test(stderr)) {
     hint = " loomdoc supports public and unlisted YouTube videos only.";
-  } else if (/HTTP Error 403|Requested format is not available|nsig|signature/i.test(stderr)) {
+  } else if (/HTTP Error 403|Requested format is not available|nsig|signature|no such option/i.test(stderr)) {
     hint =
-      " YouTube may have changed its player. Update yt-dlp (`yt-dlp -U`, or your package " +
-      "manager) and make sure a JavaScript runtime such as Deno is installed.";
+      " yt-dlp may be out of date for YouTube's current player. Run `loomdoc doctor` to " +
+      "check and update yt-dlp and Deno.";
   }
   return `yt-dlp failed (exit code ${code}): ${errorLine}${hint}`;
 }

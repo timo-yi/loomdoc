@@ -31,7 +31,7 @@ export function assertFfmpegAvailable(): Promise<void> {
   return new Promise((resolve, reject) => {
     const proc = spawn("ffmpeg", ["-version"], { stdio: "ignore" });
     proc.on("error", () =>
-      reject(new LoomdocError("ffmpeg not found on PATH. Install ffmpeg to run loomdoc.")),
+      reject(new LoomdocError("ffmpeg not found on PATH. Install ffmpeg (or run `loomdoc doctor`) to run loomdoc.")),
     );
     proc.on("close", (code) =>
       code === 0 ? resolve() : reject(new LoomdocError("ffmpeg -version failed.")),

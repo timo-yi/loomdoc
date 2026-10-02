@@ -21,6 +21,10 @@ modules get implemented. See [`PRD.md`](PRD.md) for the design and rationale.
 | `src/core/util/download.ts` | ✅ done | ffmpeg stream-copy of the video track to local Matroska. |
 | `src/core/util/ytdlp.ts` | ✅ done | yt-dlp shell-out with actionable error hints. |
 | `src/core/util/youtube-json3.ts` | ✅ done | YouTube json3 caption parser. |
+| `src/core/util/tools.ts` | ✅ done | loomdoc-managed tool locations; managed copies take precedence (D15). |
+| `src/setup/checks.ts` | ✅ done | Requirement checks: ffmpeg, API key, yt-dlp (with age), Deno (>= 2). |
+| `src/setup/install.ts` | ✅ done | ffmpeg via package manager; checksum-verified yt-dlp/Deno downloads. |
+| `src/setup/preflight.ts` | ✅ done | Consent-gated fix flow; `loomdoc doctor` and per-run checks. |
 | `src/core/pipeline.ts` | ✅ wired | Orchestrates all stages; throws at the first unimplemented stage. |
 | `src/cli.ts` | ✅ wired | Thin CLI over the core (arg parsing + output paths). |
 | `src/index.ts` | ✅ done | Public library API. |
@@ -52,6 +56,12 @@ and frame seeks all worked, and the scratch dir was removed after the run and af
 mid-download Ctrl-C). YouTube ingest is unit-tested but has **not** been run live yet: the
 development container's IP was blocked by YouTube's bot check. First real YouTube run from a
 normal connection is its live validation.
+
+**Launch checks (D15):** validated live on Linux: `doctor` without a terminal installs nothing
+and prints manual steps; `--yes` downloaded and verified Deno and yt-dlp into the managed dir,
+and yt-dlp detected the managed Deno and its bundled YouTube player component. The consent
+prompt was exercised in a real terminal (Enter, "n" and Ctrl-D mean no; Ctrl-C aborts with exit code 130). Package-manager
+installs of ffmpeg and the macOS/Windows paths are unit-tested but not run live.
 
 Follow-ups (not blockers): tune the frame thresholds and the `maxCandidates` cap against more
 Looms, and the deferred items in PRD §8 (Google Docs, PPTX, batch, private-Loom auth,
