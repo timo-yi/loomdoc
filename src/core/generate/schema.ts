@@ -33,7 +33,7 @@ export const stepSchema = z.object({
 export const loomDocSchema = z.object({
   title: z.string().min(1),
   overview: z.string().describe("A short orientation paragraph for the whole document."),
-  audience: z.string().describe("Who this doc is for — supplied context or inferred from the video."),
+  audience: z.string().describe("Who this doc is for: supplied context or inferred from the video."),
   steps: z.array(stepSchema).min(1),
 });
 
