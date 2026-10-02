@@ -95,6 +95,10 @@ async function main(): Promise<void> {
   if (values.preset !== undefined && !isStylePresetId(values.preset)) {
     throw new Error(`Unknown --preset "${values.preset}". Choose one of: ${STYLE_PRESET_IDS.join(", ")}.`);
   }
+  const pdfLayout = values["pdf-layout"];
+  if (pdfLayout !== undefined && pdfLayout !== "pageless" && pdfLayout !== "paged") {
+    throw new Error(`Unknown --pdf-layout "${pdfLayout}". Choose pageless or paged.`);
+  }
   if (values.preset === "custom" && !values.guidance?.trim()) {
     throw new Error('--preset custom needs --guidance describing the document you want.');
   }
@@ -105,11 +109,6 @@ async function main(): Promise<void> {
   if (!ready) {
     process.stderr.write("\nloomdoc can't run until the items above are fixed.\n");
     process.exit(1);
-  }
-
-  const pdfLayout = values["pdf-layout"];
-  if (pdfLayout !== undefined && pdfLayout !== "pageless" && pdfLayout !== "paged") {
-    throw new Error(`Unknown --pdf-layout "${pdfLayout}". Choose pageless or paged.`);
   }
 
   const formats = values.formats

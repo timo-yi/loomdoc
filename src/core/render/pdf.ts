@@ -32,6 +32,8 @@ export const MAX_PDF_PAGE_HEIGHT = 14_400;
 export const MIN_IMAGE_SCALE = 0.7;
 /** Safety margin when fitting a screenshot and its caption into the rest of a page. */
 const FIT_HEADROOM = 6;
+/** Smallest content area on a pageless page (one line of the largest text). */
+const MIN_CONTENT_HEIGHT = 30;
 /** Headroom on pageless pages so rounding can never trip pdfkit's automatic page break. */
 const PAGELESS_SLACK = 12;
 
@@ -42,7 +44,8 @@ export interface PdfOptions {
 }
 
 interface FittedImage {
-  path: string;
+  /** The file itself, or a PNG re-encoding of it when pdfkit can't read the original. */
+  source: string | Buffer;
   width: number;
   height: number;
 }
@@ -90,7 +93,8 @@ function pagelessPdf(doc: LoomDoc, blocks: StepBlock[], maxPageHeight: number): 
   // Pass 2: draw each group on a page of exactly its measured height.
   const pdf = new PDFDocument({ margin: MARGIN, autoFirstPage: false });
   for (const [p, group] of pages.entries()) {
-    const contentHeight = group.reduce((sum, i) => sum + heights[i]!, 0);
+    // At least one line tall: pdfkit needs a full line of room even for empty text.
+    const contentHeight = Math.max(MIN_CONTENT_HEIGHT, group.reduce((sum, i) => sum + heights[i]!, 0));
     const height = Math.min(maxPageHeight, Math.ceil(contentHeight + 2 * MARGIN + PAGELESS_SLACK));
     pdf.addPage({ size: [PAGE_WIDTH, height], margin: MARGIN });
     if (p === 0) openAtFitWidth(pdf);
@@ -152,15 +156,18 @@ function pagedPdf(doc: LoomDoc, blocks: StepBlock[]): PDFKit.PDFDocument {
 
 /** Height the start of a step needs on the current page so its heading isn't stranded. */
 function keepTogetherHeight(pdf: PDFKit.PDFDocument, block: StepBlock): number {
+  return preservingFont(pdf, () => measureKeepTogether(pdf, block));
+}
+
+function measureKeepTogether(pdf: PDFKit.PDFDocument, block: StepBlock): number {
   const width = pdf.page.width - pdf.page.margins.left - pdf.page.margins.right;
   // Measure with the font the heading's leading space will actually use (the previous text's).
   const spacing = pdf.currentLineHeight(true) * 0.75;
   const caption = block.image ? captionHeight(pdf, block, width) : 0;
-  pdf.font("Helvetica-Bold").fontSize(14);
+  useFont(pdf, "Helvetica-Bold", 14);
   const heading = pdf.heightOfString(headingText(block), { width });
   const imageGap = pdf.currentLineHeight(true) * 0.25; // drawStep's moveDown(0.25) in the heading font
-  // Leave the body font active, as it was before measuring.
-  pdf.font("Helvetica").fontSize(11);
+  useFont(pdf, "Helvetica", 11);
   const twoLines = pdf.currentLineHeight(true) * 2;
   if (!block.image) return spacing + heading + twoLines;
   // The body may flow onto the next page; the screenshot and caption should not.
@@ -182,13 +189,17 @@ export function planImage(imageHeight: number, available: number): { scale: numb
 // --- shared drawing ------------------------------------------------------------------------
 
 function drawHeader(pdf: PDFKit.PDFDocument, doc: LoomDoc): void {
-  pdf.font("Helvetica-Bold").fontSize(20).text(doc.title);
-  if (doc.overview) pdf.moveDown(0.5).font("Helvetica").fontSize(11).text(doc.overview);
+  useFont(pdf, "Helvetica-Bold", 20).text(doc.title);
+  if (doc.overview) {
+    pdf.moveDown(0.5);
+    useFont(pdf, "Helvetica", 11).text(doc.overview);
+  }
 }
 
 /** Draw one step. `paged` enables fitting the screenshot to the space left on the page. */
 function drawStep(pdf: PDFKit.PDFDocument, block: StepBlock, paged = false): void {
-  pdf.moveDown(0.75).font("Helvetica-Bold").fontSize(14).text(headingText(block));
+  pdf.moveDown(0.75); // in the previous text's font, exactly as measured
+  useFont(pdf, "Helvetica-Bold", 14).text(headingText(block));
   const { step, image } = block;
   if (image) {
     pdf.moveDown(0.25);
@@ -206,40 +217,95 @@ function drawStep(pdf: PDFKit.PDFDocument, block: StepBlock, paged = false): voi
         height = Math.round(height * plan.scale);
       }
     }
-    pdf.image(image.path, { width, height });
+    pdf.image(image.source, { width, height });
     if (step.screenshot?.caption) {
-      pdf.moveDown(0.25).font("Helvetica-Oblique").fontSize(9).text(step.screenshot.caption);
+      pdf.moveDown(0.25);
+      useFont(pdf, "Helvetica-Oblique", 9).text(step.screenshot.caption);
     }
   }
-  if (step.body) pdf.moveDown(0.25).font("Helvetica").fontSize(11).text(step.body);
+  if (step.body) {
+    pdf.moveDown(0.25);
+    useFont(pdf, "Helvetica", 11).text(step.body);
+  }
 }
 
 function captionHeight(pdf: PDFKit.PDFDocument, block: StepBlock, width: number): number {
   const caption = block.step.screenshot?.caption;
   if (!caption) return 0;
-  pdf.font("Helvetica-Oblique").fontSize(9);
-  return pdf.currentLineHeight(true) * 0.25 + pdf.heightOfString(caption, { width });
+  return preservingFont(pdf, () => {
+    useFont(pdf, "Helvetica-Oblique", 9);
+    return pdf.currentLineHeight(true) * 0.25 + pdf.heightOfString(caption, { width });
+  });
+}
+
+// Font state: the spacing before a block (moveDown) depends on the font active at that moment,
+// so the measuring helpers must leave it exactly as they found it. loomdoc records every font
+// it sets rather than reading pdfkit's private state.
+const activeFont = new WeakMap<PDFKit.PDFDocument, [name: string, size: number]>();
+
+function useFont(pdf: PDFKit.PDFDocument, name: string, size: number): PDFKit.PDFDocument {
+  activeFont.set(pdf, [name, size]);
+  return pdf.font(name).fontSize(size);
+}
+
+function preservingFont<T>(pdf: PDFKit.PDFDocument, measure: () => T): T {
+  const saved = activeFont.get(pdf);
+  try {
+    return measure();
+  } finally {
+    if (saved) useFont(pdf, saved[0], saved[1]);
+  }
 }
 
 function headingText(block: StepBlock): string {
   return `${block.number}. ${block.step.heading}`;
 }
 
-/** Measure every screenshot once up front; an unreadable one is dropped, not fatal. */
+/**
+ * Prepare every screenshot once, up front, so both pageless passes see identical input and a
+ * bad image can never fail the document after the model has already been paid for. Each image
+ * is checked with pdfkit itself (sharp reads only the header); one pdfkit can't embed (a WebP,
+ * GIF or TIFF) is re-encoded to PNG, and one that still can't be read (truncated, corrupt) is
+ * dropped while the step's text is kept.
+ */
 async function prepareSteps(doc: LoomDoc): Promise<StepBlock[]> {
-  return Promise.all(
+  const checker = new PDFDocument({ autoFirstPage: false });
+  const blocks = await Promise.all(
     doc.steps.map(async (step, i) => {
       const block: StepBlock = { number: i + 1, step };
       const path = step.screenshot?.path;
       if (path) {
-        try {
-          const meta = await sharp(path).metadata();
-          block.image = { path, ...fitWithin(meta.width, meta.height, IMAGE_MAX_WIDTH, IMAGE_MAX_HEIGHT) };
-        } catch {
-          // Unreadable image: keep the step's text, skip the image.
+        const source = await embeddableImage(checker, path);
+        if (source) {
+          try {
+            const meta = await sharp(source).metadata();
+            block.image = { source, ...fitWithin(meta.width, meta.height, IMAGE_MAX_WIDTH, IMAGE_MAX_HEIGHT) };
+          } catch {
+            // Unreadable dimensions: keep the step's text, skip the image.
+          }
         }
       }
       return block;
     }),
   );
+  checker.end();
+  return blocks;
+}
+
+async function embeddableImage(checker: PDFKit.PDFDocument, path: string): Promise<string | Buffer | null> {
+  const opens = (src: string | Buffer): boolean => {
+    try {
+      (checker as unknown as { openImage(src: string | Buffer): unknown }).openImage(src);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (opens(path)) return path;
+  try {
+    const png = await sharp(path).png().toBuffer();
+    return opens(png) ? png : null;
+  } catch {
+    return null;
+  }
 }

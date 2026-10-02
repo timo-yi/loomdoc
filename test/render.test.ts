@@ -257,3 +257,84 @@ test("writeDocx keeps each step heading with what follows, and screenshots with 
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+// --- review regressions (PR #5 skeptic pass) ---------------------------------------------
+
+test("an unreadable or pdfkit-unsupported screenshot never fails the PDF", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "loomdoc-pdf-badimg-"));
+  try {
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    await mkdir(join(dir, "images"), { recursive: true });
+    const good = join(dir, "images", "good.png");
+    await sharp({ create: { width: 640, height: 360, channels: 3, background: "#79c" } }).png().toFile(good);
+    // Header intact (sharp's metadata reads it) but the data cut off: pdfkit can't embed it.
+    const truncated = join(dir, "images", "truncated.png");
+    const full = await readFile(good);
+    await writeFile(truncated, full.subarray(0, Math.floor(full.length / 2)));
+    // A format pdfkit doesn't support at all: re-encoded to PNG rather than dropped.
+    const webp = join(dir, "images", "shot.webp");
+    await sharp({ create: { width: 640, height: 360, channels: 3, background: "#c97" } }).webp().toFile(webp);
+
+    const doc: LoomDoc = {
+      title: "Bad images",
+      overview: "",
+      steps: [
+        { heading: "Truncated", body: "Text is kept.", screenshot: { path: truncated, caption: "c" } },
+        { heading: "WebP", body: "Converted.", screenshot: { path: webp, caption: "c" } },
+        { heading: "Good", body: "Fine.", screenshot: { path: good, caption: "c" } },
+      ],
+    };
+    for (const layout of ["pageless", "paged"] as const) {
+      const out = await writePdf(doc, dir, { layout });
+      const raw = (await readFile(out)).toString("latin1");
+      const images = (raw.match(/\/Subtype \/Image/g) ?? []).length;
+      assert.equal(images, 2, `${layout}: the WebP and the good PNG are embedded, the truncated one skipped`);
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("paged: a step after a captioned screenshot with no body text keeps its heading", { skip: !hasPdftotext }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), "loomdoc-paged-caption-"));
+  try {
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(join(dir, "images"), { recursive: true });
+    const wide = join(dir, "images", "wide.png");
+    await sharp({ create: { width: 460, height: 340, channels: 3, background: "#79c" } }).png().toFile(wide);
+    // The reviewer's failing heights: the previous step ends on a caption, whose (smaller) font
+    // used to leak into the next step's spacing estimate.
+    for (const h of [131, 320]) {
+      const first = join(dir, "images", `first-${h}.png`);
+      await sharp({ create: { width: 460, height: h, channels: 3, background: "#9c7" } }).png().toFile(first);
+      const doc: LoomDoc = {
+        title: "T",
+        overview: "Overview.",
+        steps: [
+          { heading: "Step A", body: "", screenshot: { path: first, caption: "Caption A" } },
+          { heading: "Step B", body: "", screenshot: { path: first, caption: "Caption A" } },
+          { heading: "Step C", body: "Body.", screenshot: { path: wide, caption: "Caption C" } },
+        ],
+      };
+      const out = await writePdf(doc, dir, { layout: "paged" });
+      const pages = spawnSync("pdftotext", ["-layout", out, "-"], { encoding: "utf8" }).stdout.split("\f").filter((p) => p.trim());
+      for (const page of pages) {
+        const last = page.split("\n").map((l) => l.trim()).filter(Boolean).at(-1)!;
+        assert.doesNotMatch(last, /^\d+\. Step [A-Z]$/, `h=${h}: a page ends with a stranded heading`);
+      }
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("pageless: an empty document is still exactly one page", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "loomdoc-pdf-empty-"));
+  try {
+    for (const doc of [{ title: "", overview: "", steps: [] }, { title: "T", overview: "", steps: [] }] as LoomDoc[]) {
+      assert.equal(pdfPages(await readFile(await writePdf(doc, dir))).length, 1);
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
