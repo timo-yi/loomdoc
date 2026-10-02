@@ -37,8 +37,8 @@ modules get implemented. See [`PRD.md`](PRD.md) for the design and rationale.
 | `src/core/frames/winnow.ts` | ✅ done | Stability gate: skip motion, emit one rep per settled distinct screen. |
 | `src/core/frames/extract.ts` | ✅ done | Fast ffmpeg input-seek; verifies a non-empty frame was written. |
 | `src/core/generate/generate.ts` | ✅ done¹ | Agentic vision LLM (Vercel AI SDK); id-referenced frames, guarded output, capped candidates; reviewed by skeptics and reworked. |
-| `src/core/render/docx.ts` | ✅ done | `docx`; embedded images bounded in both dimensions; content-typed. |
-| `src/core/render/pdf.ts` | ✅ done | `pdfkit` (pure JS); embedded images with pagination. |
+| `src/core/render/docx.ts` | ✅ done | `docx`; embedded images bounded in both dimensions; content-typed; headings and captioned screenshots keep with next (D18). |
+| `src/core/render/pdf.ts` | ✅ done | `pdfkit`; pageless by default (two-pass, split between steps past 200 in, opens at fit-width) or paged with keep-together and fit-to-page screenshots (D18). |
 | `src/core/render/fit.ts` | ✅ done | Shared aspect-preserving fit (bounds width AND height). |
 
 ¹ The deterministic parts (prompt building, transcript/image layout, the frame tool wiring)

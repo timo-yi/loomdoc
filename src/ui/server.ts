@@ -11,6 +11,7 @@ import { STYLE_PRESET_IDS, STYLE_PRESETS } from "../core/generate/styles.js";
 import {
   DEFAULT_EFFORT,
   DEFAULT_FORMATS,
+  DEFAULT_PDF_LAYOUT,
   DEFAULT_MODEL,
   type LoomdocOptions,
   type LoomdocResult,
@@ -70,6 +71,7 @@ const runRequestSchema = z.object({
   industry: z.string().max(300).optional(),
   useCase: z.string().max(300).optional(),
   formats: z.array(z.enum(["markdown", "docx", "pdf"])).min(1),
+  pdfLayout: z.enum(["pageless", "paged"]).optional(),
   model: z.string().trim().max(100).optional(),
   effort: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
 });
@@ -187,7 +189,7 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
           const p = STYLE_PRESETS[id];
           return { id: p.id, label: p.label, summary: p.summary };
         }),
-        defaults: { formats: DEFAULT_FORMATS, model: DEFAULT_MODEL, effort: DEFAULT_EFFORT },
+        defaults: { formats: DEFAULT_FORMATS, pdfLayout: DEFAULT_PDF_LAYOUT, model: DEFAULT_MODEL, effort: DEFAULT_EFFORT },
         notices: options.setupNotices ? await options.setupNotices() : [],
         activeRunId,
       });
@@ -272,6 +274,7 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
         url: body.url,
         outDir: options.outDir,
         formats: body.formats,
+        pdfLayout: body.pdfLayout,
         model: body.model || undefined,
         effort: body.effort,
         context: {

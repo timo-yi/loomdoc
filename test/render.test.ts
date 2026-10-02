@@ -7,7 +7,9 @@ import sharp from "sharp";
 import type { LoomDoc } from "../src/core/types.js";
 import { renderMarkdown, writeMarkdown } from "../src/core/render/markdown.js";
 import { writeDocx } from "../src/core/render/docx.js";
-import { writePdf } from "../src/core/render/pdf.js";
+import { groupIntoPages, MIN_IMAGE_SCALE, planImage, writePdf } from "../src/core/render/pdf.js";
+import { spawnSync } from "node:child_process";
+import { unzipSync, strFromU8 } from "fflate";
 
 async function sampleDoc(dir: string): Promise<LoomDoc> {
   const shot = join(dir, "images", "step-01.png");
@@ -116,16 +118,222 @@ test("writePdf produces a valid .pdf with content", async () => {
   }
 });
 
-test("writePdf paginates tall images onto multiple pages (no clipping)", async () => {
+test("paged writePdf paginates tall images onto multiple pages (no clipping)", async () => {
   const dir = await mkdtemp(join(tmpdir(), "loomdoc-pdfpage-"));
   try {
     await (await import("node:fs/promises")).mkdir(join(dir, "images"), { recursive: true });
     const doc = await tallImageDoc(dir);
-    const out = await writePdf(doc, dir);
+    const out = await writePdf(doc, dir, { layout: "paged" });
     const text = (await readFile(out)).toString("latin1");
     // Count page objects ("/Type /Page" but not "/Type /Pages").
     const pageCount = (text.match(/\/Type\s*\/Page(?![sA-Za-z])/g) ?? []).length;
     assert.ok(pageCount >= 2, `three tall images should span multiple pages, got ${pageCount}`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+// --- PDF layouts ---------------------------------------------------------------------------
+
+function pdfPages(bytes: Buffer): number[] {
+  const text = bytes.toString("latin1");
+  return [...text.matchAll(/\/MediaBox \[0 0 612 (\d+(?:\.\d+)?)\]/g)].map((m) => Number(m[1]));
+}
+
+async function manyStepDoc(dir: string, steps: number): Promise<LoomDoc> {
+  const { mkdir } = await import("node:fs/promises");
+  await mkdir(join(dir, "images"), { recursive: true });
+  const shot = join(dir, "images", "wide.png");
+  await sharp({ create: { width: 1280, height: 720, channels: 3, background: { r: 120, g: 160, b: 200 } } })
+    .png()
+    .toFile(shot);
+  return {
+    title: "Many steps",
+    overview: "Overview.",
+    steps: Array.from({ length: steps }, (_, i) => ({
+      heading: `Step ${i + 1}`,
+      body: "Do the thing, then check the result. ".repeat(4),
+      screenshot: { path: shot, caption: "What you should see" },
+    })),
+  };
+}
+
+test("pageless writePdf (the default) is one page sized to the content and opens at fit-width", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "loomdoc-pageless-"));
+  try {
+    const out = await writePdf(await manyStepDoc(dir, 8), dir);
+    const bytes = await readFile(out);
+    const heights = pdfPages(bytes);
+    assert.equal(heights.length, 1, "one continuous page");
+    assert.ok(heights[0]! > 792 * 2 && heights[0]! < 14_400, `height ${heights[0]}`);
+    assert.match(bytes.toString("latin1"), /\/OpenAction \[\d+ 0 R \/FitH null\]/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("pageless writePdf splits only between steps when the page limit is reached", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "loomdoc-pageless-split-"));
+  try {
+    const out = await writePdf(await manyStepDoc(dir, 8), dir, { maxPageHeight: 1500 });
+    const heights = pdfPages(await readFile(out));
+    assert.ok(heights.length > 1, "split into several tall pages");
+    for (const h of heights) assert.ok(h <= 1500, `page height ${h} within the limit`);
+    // Each step block is ~400pt, so pages hold whole steps: no page is a near-empty spill-over.
+    for (const h of heights.slice(0, -1)) assert.ok(h > 1000, `page ${h} is well filled`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("groupIntoPages packs blocks in order and never splits one", () => {
+  assert.deepEqual(groupIntoPages([100, 200, 300], 1000), [[0, 1, 2]]);
+  assert.deepEqual(groupIntoPages([400, 400, 400], 1000), [[0, 1], [2]]);
+  // A block taller than the limit gets a page of its own.
+  assert.deepEqual(groupIntoPages([100, 2000, 100], 1000), [[0], [1], [2]]);
+  assert.deepEqual(groupIntoPages([], 1000), []);
+});
+
+test("planImage keeps full size, shrinks to finish a page, or moves to the next page", () => {
+  assert.deepEqual(planImage(300, 500), { scale: 1 });
+  assert.deepEqual(planImage(300, 240), { scale: 0.8 });
+  assert.deepEqual(planImage(300, 300 * MIN_IMAGE_SCALE), { scale: MIN_IMAGE_SCALE });
+  assert.equal(planImage(300, 150), "next-page");
+});
+
+const hasPdftotext = spawnSync("pdftotext", ["-v"], { stdio: "ignore" }).status === 0;
+
+test("paged writePdf never strands a heading or orphans a caption", { skip: !hasPdftotext }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), "loomdoc-paged-keep-"));
+  try {
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(join(dir, "images"), { recursive: true });
+    const wide = join(dir, "images", "wide.png");
+    const tall = join(dir, "images", "tall.png");
+    await sharp({ create: { width: 1280, height: 720, channels: 3, background: "#79c" } }).png().toFile(wide);
+    await sharp({ create: { width: 800, height: 1000, channels: 3, background: "#9c7" } }).png().toFile(tall);
+    // Varied text lengths and image shapes put steps at every position on the page. The
+    // previous renderer left 4 headings stranded and 4 captions orphaned on this document.
+    const doc: LoomDoc = {
+      title: "Varied",
+      overview: "Overview sentence. ".repeat(10),
+      steps: Array.from({ length: 12 }, (_, i) => ({
+        heading: `Step ${i + 1}`,
+        body: "Do the thing, then check the result. ".repeat(1 + ((i * 5) % 7)),
+        screenshot: i % 4 === 2 ? undefined : { path: i % 3 === 1 ? tall : wide, caption: "What you should see" },
+      })),
+    };
+    const out = await writePdf(doc, dir, { layout: "paged" });
+    const text = spawnSync("pdftotext", ["-layout", out, "-"], { encoding: "utf8" }).stdout;
+    const pages = text.split("\f").filter((p) => p.trim().length > 0);
+    assert.ok(pages.length > 1);
+    for (const [i, page] of pages.entries()) {
+      const lines = page.split("\n").map((l) => l.trim()).filter(Boolean);
+      // pdftotext omits images, so a heading as the last text line means its screenshot
+      // started the next page without it.
+      assert.doesNotMatch(lines.at(-1)!, /^\d+\. Step \d+$/, `page ${i + 1} ends with a stranded heading`);
+      assert.notEqual(lines[0], "What you should see", `page ${i + 1} starts with an orphaned caption`);
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("writeDocx keeps each step heading with what follows, and screenshots with captions", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "loomdoc-docx-keep-"));
+  try {
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(join(dir, "images"), { recursive: true });
+    const out = await writeDocx(await sampleDoc(dir), dir);
+    const xml = strFromU8(unzipSync(new Uint8Array(await readFile(out)))["word/document.xml"]!);
+    const paragraphs = xml.split("</w:p>");
+    const heading = paragraphs.find((p) => p.includes("1. Open the page"))!;
+    assert.match(heading, /<w:keepNext\/>/);
+    const image = paragraphs.find((p) => p.includes("<w:drawing>"))!;
+    assert.match(image, /<w:keepNext\/>/, "image paragraph kept with its caption");
+    const lastHeading = paragraphs.find((p) => p.includes("2. Click save"))!;
+    assert.match(lastHeading, /<w:keepNext\/>/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+// --- review regressions (PR #5 skeptic pass) ---------------------------------------------
+
+test("an unreadable or pdfkit-unsupported screenshot never fails the PDF", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "loomdoc-pdf-badimg-"));
+  try {
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    await mkdir(join(dir, "images"), { recursive: true });
+    const good = join(dir, "images", "good.png");
+    await sharp({ create: { width: 640, height: 360, channels: 3, background: "#79c" } }).png().toFile(good);
+    // Header intact (sharp's metadata reads it) but the data cut off: pdfkit can't embed it.
+    const truncated = join(dir, "images", "truncated.png");
+    const full = await readFile(good);
+    await writeFile(truncated, full.subarray(0, Math.floor(full.length / 2)));
+    // A format pdfkit doesn't support at all: re-encoded to PNG rather than dropped.
+    const webp = join(dir, "images", "shot.webp");
+    await sharp({ create: { width: 640, height: 360, channels: 3, background: "#c97" } }).webp().toFile(webp);
+
+    const doc: LoomDoc = {
+      title: "Bad images",
+      overview: "",
+      steps: [
+        { heading: "Truncated", body: "Text is kept.", screenshot: { path: truncated, caption: "c" } },
+        { heading: "WebP", body: "Converted.", screenshot: { path: webp, caption: "c" } },
+        { heading: "Good", body: "Fine.", screenshot: { path: good, caption: "c" } },
+      ],
+    };
+    for (const layout of ["pageless", "paged"] as const) {
+      const out = await writePdf(doc, dir, { layout });
+      const raw = (await readFile(out)).toString("latin1");
+      const images = (raw.match(/\/Subtype \/Image/g) ?? []).length;
+      assert.equal(images, 2, `${layout}: the WebP and the good PNG are embedded, the truncated one skipped`);
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("paged: a step after a captioned screenshot with no body text keeps its heading", { skip: !hasPdftotext }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), "loomdoc-paged-caption-"));
+  try {
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(join(dir, "images"), { recursive: true });
+    const wide = join(dir, "images", "wide.png");
+    await sharp({ create: { width: 460, height: 340, channels: 3, background: "#79c" } }).png().toFile(wide);
+    // The reviewer's failing heights: the previous step ends on a caption, whose (smaller) font
+    // used to leak into the next step's spacing estimate.
+    for (const h of [131, 320]) {
+      const first = join(dir, "images", `first-${h}.png`);
+      await sharp({ create: { width: 460, height: h, channels: 3, background: "#9c7" } }).png().toFile(first);
+      const doc: LoomDoc = {
+        title: "T",
+        overview: "Overview.",
+        steps: [
+          { heading: "Step A", body: "", screenshot: { path: first, caption: "Caption A" } },
+          { heading: "Step B", body: "", screenshot: { path: first, caption: "Caption A" } },
+          { heading: "Step C", body: "Body.", screenshot: { path: wide, caption: "Caption C" } },
+        ],
+      };
+      const out = await writePdf(doc, dir, { layout: "paged" });
+      const pages = spawnSync("pdftotext", ["-layout", out, "-"], { encoding: "utf8" }).stdout.split("\f").filter((p) => p.trim());
+      for (const page of pages) {
+        const last = page.split("\n").map((l) => l.trim()).filter(Boolean).at(-1)!;
+        assert.doesNotMatch(last, /^\d+\. Step [A-Z]$/, `h=${h}: a page ends with a stranded heading`);
+      }
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("pageless: an empty document is still exactly one page", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "loomdoc-pdf-empty-"));
+  try {
+    for (const doc of [{ title: "", overview: "", steps: [] }, { title: "T", overview: "", steps: [] }] as LoomDoc[]) {
+      assert.equal(pdfPages(await readFile(await writePdf(doc, dir))).length, 1);
+    }
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

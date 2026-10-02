@@ -8,6 +8,10 @@ import { fitWithin } from "./fit.js";
 /**
  * Word (.docx) renderer (PRD decision D8). Self-contained: screenshots are embedded into
  * the file via ImageRun, so it travels as a single portable document.
+ *
+ * Word does its own pagination, so a page break can't be avoided, but it can be steered
+ * (PRD D18): each step heading is "keep with next" so it never sits alone at the bottom of a
+ * page, and each screenshot is kept with its caption.
  */
 
 const MAX_IMAGE_WIDTH = 600; // px
@@ -22,11 +26,13 @@ export async function writeDocx(doc: LoomDoc, outputDir: string): Promise<string
   let i = 0;
   for (const step of doc.steps) {
     i++;
-    children.push(new Paragraph({ text: `${i}. ${step.heading}`, heading: HeadingLevel.HEADING_2 }));
+    children.push(
+      new Paragraph({ text: `${i}. ${step.heading}`, heading: HeadingLevel.HEADING_2, keepNext: true, keepLines: true }),
+    );
     const shot = step.screenshot;
     if (shot?.path) {
       const image = await buildImageRun(shot.path);
-      if (image) children.push(new Paragraph({ children: [image] }));
+      if (image) children.push(new Paragraph({ children: [image], keepNext: Boolean(shot.caption) }));
       if (shot.caption) {
         children.push(new Paragraph({ children: [new TextRun({ text: shot.caption, italics: true })] }));
       }

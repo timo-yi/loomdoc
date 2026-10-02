@@ -65,6 +65,12 @@ export function pageHtml(token: string): string {
         <label class="check"><input type="checkbox" name="formats" value="pdf"> PDF</label>
       </div>
       <div class="grid">
+        <label>PDF layout
+          <select name="pdfLayout">
+            <option value="pageless">Pageless (one continuous page)</option>
+            <option value="paged">Pages (for printing)</option>
+          </select>
+        </label>
         <label>Model<input name="model" maxlength="100" spellcheck="false"></label>
         <label>Effort
           <select name="effort">
@@ -373,6 +379,7 @@ export const APP_JS = `
       industry: String(data.get("industry") || ""),
       useCase: String(data.get("useCase") || ""),
       formats: data.getAll("formats").map(String),
+      pdfLayout: String(data.get("pdfLayout") || "pageless"),
       model: String(data.get("model") || "").trim(),
       effort: String(data.get("effort") || "medium")
     };
@@ -584,7 +591,7 @@ export const APP_JS = `
     var body = collect();
     var problem = validate(body);
     if (problem) { showError(problem); return; }
-    savePrefs({ preset: body.preset, formats: body.formats, model: body.model, effort: body.effort });
+    savePrefs({ preset: body.preset, formats: body.formats, pdfLayout: body.pdfLayout, model: body.model, effort: body.effort });
     setBusy(true);
     post("/api/runs", body).then(function (json) {
       follow(json.id);
@@ -612,6 +619,7 @@ export const APP_JS = `
     form.querySelectorAll('input[name="formats"]').forEach(function (c) { c.checked = formats.indexOf(c.value) !== -1; });
     form.elements.model.value = prefs.model || cfg.defaults.model;
     form.elements.effort.value = prefs.effort || cfg.defaults.effort;
+    form.elements.pdfLayout.value = prefs.pdfLayout || cfg.defaults.pdfLayout;
     showNotices(cfg.notices || []);
     if (cfg.activeRunId) follow(cfg.activeRunId);
   }).catch(function (err) {

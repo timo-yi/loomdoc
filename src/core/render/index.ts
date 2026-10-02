@@ -1,4 +1,4 @@
-import type { LoomDoc, OutputFormat } from "../types.js";
+import { DEFAULT_PDF_LAYOUT, type LoomDoc, type OutputFormat, type PdfLayout } from "../types.js";
 import { writeMarkdown } from "./markdown.js";
 import { writeDocx } from "./docx.js";
 import { writePdf } from "./pdf.js";
@@ -13,6 +13,7 @@ export async function renderAll(
   outputDir: string,
   formats: OutputFormat[],
   imagesDirName = "images",
+  pdfLayout: PdfLayout = DEFAULT_PDF_LAYOUT,
 ): Promise<string[]> {
   const files: string[] = [];
   for (const fmt of formats) {
@@ -24,7 +25,7 @@ export async function renderAll(
         files.push(await writeDocx(doc, outputDir));
         break;
       case "pdf":
-        files.push(await writePdf(doc, outputDir));
+        files.push(await writePdf(doc, outputDir, { layout: pdfLayout }));
         break;
     }
   }
