@@ -3,10 +3,10 @@ import { parseArgs } from "node:util";
 import { runLoomdoc } from "./index.js";
 import type { DocContext, Effort, OutputFormat } from "./core/types.js";
 
-const USAGE = `loomdoc — turn a Loom walkthrough into a screenshot-rich how-to doc
+const USAGE = `loomdoc – turn a Loom or YouTube walkthrough into a screenshot-rich how-to doc
 
 Usage:
-  loomdoc <loom-share-url> [options]
+  loomdoc <loom-or-youtube-url> [options]
 
 Options:
   --out <dir>        Output root directory (default: ./out)
@@ -26,6 +26,7 @@ Relevance context (all optional; inferred from the video when omitted):
   -h, --help         Show this help
 
 Requires ffmpeg on PATH and ANTHROPIC_API_KEY in the environment.
+YouTube links also require yt-dlp on PATH (plus Deno, which yt-dlp uses for YouTube).
 `;
 
 async function main(): Promise<void> {

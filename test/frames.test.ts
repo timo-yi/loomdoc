@@ -225,6 +225,24 @@ test("winnow enforces the candidate cap, keeping the first and the most distinct
   }
 });
 
+test("at low sample rates (long videos) a screen seen in one sample is still kept", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "loomdoc-lowfps-"));
+  try {
+    const p = await makeFixtures(dir);
+    // Four distinct screens, each caught by exactly one sample 3 s apart (a 2-hour video's rate).
+    const seq = frames([0, p.base], [3, p.denseA], [6, p.denseB], [9, p.denseC]);
+    const low = await winnowFrames(seq, { ...OPTS, sampleFps: 1 / 3 });
+    assert.equal(low.length, 4, "the motion gate must not fire when samples are seconds apart");
+
+    // At the normal rate the same one-sample screens look like motion and are skipped,
+    // which is the intended scroll/animation filter.
+    const normal = await winnowFrames(seq, { ...OPTS, sampleFps: 2 });
+    assert.ok(normal.length < 4);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("winnow edge cases: empty and single frame", async () => {
   const dir = await mkdtemp(join(tmpdir(), "loomdoc-w5-"));
   try {

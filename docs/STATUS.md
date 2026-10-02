@@ -14,7 +14,13 @@ modules get implemented. See [`PRD.md`](PRD.md) for the design and rationale.
 | `src/core/util/errors.ts` | ✅ done | Error types. |
 | `src/core/util/vtt.ts` | ✅ done | Line-driven WebVTT parser (entity decode, robust separators). |
 | `src/core/util/transcript-json.ts` | ✅ done | Tolerant JSON-transcript parser (json-subs-only fallback). |
-| `src/core/ingest/loom.ts` | ✅ done | GraphQL + REST + CDN-fallback ingest; reviewed by skeptics and hardened. |
+| `src/core/ingest/loom.ts` | ✅ done | GraphQL + REST + CDN-fallback ingest; downloads the video track locally (D14). |
+| `src/core/ingest/youtube.ts` | ✅ done | yt-dlp ingest: metadata, caption-track choice, video + json3 captions download (D13). |
+| `src/core/ingest/index.ts` | ✅ done | URL to source routing (`detectSource`, `fetchVideo`). |
+| `src/core/util/scratch.ts` | ✅ done | Per-run temp dir; removed on finish, failure, Ctrl-C, and by a 24h stale sweep. |
+| `src/core/util/download.ts` | ✅ done | ffmpeg stream-copy of the video track to local Matroska. |
+| `src/core/util/ytdlp.ts` | ✅ done | yt-dlp shell-out with actionable error hints. |
+| `src/core/util/youtube-json3.ts` | ✅ done | YouTube json3 caption parser. |
 | `src/core/pipeline.ts` | ✅ wired | Orchestrates all stages; throws at the first unimplemented stage. |
 | `src/cli.ts` | ✅ wired | Thin CLI over the core (arg parsing + output paths). |
 | `src/index.ts` | ✅ done | Public library API. |
@@ -39,6 +45,13 @@ All modules are implemented, unit-tested, and skeptic-reviewed (55 tests). v1 ha
 generation → Markdown/Word/PDF all worked, and a transcript fidelity check found the output
 faithful (no fabrication, sensible screenshot selection, correct step structure). See the
 README for the local walkthrough.
+
+**YouTube support and local download (D13, D14):** Loom ingest with local download was
+validated live (real public Loom: transcript, 59 MB video-only download, sampling, winnowing,
+and frame seeks all worked, and the scratch dir was removed after the run and after a
+mid-download Ctrl-C). YouTube ingest is unit-tested but has **not** been run live yet: the
+development container's IP was blocked by YouTube's bot check. First real YouTube run from a
+normal connection is its live validation.
 
 Follow-ups (not blockers): tune the frame thresholds and the `maxCandidates` cap against more
 Looms, and the deferred items in PRD §8 (Google Docs, PPTX, batch, private-Loom auth,

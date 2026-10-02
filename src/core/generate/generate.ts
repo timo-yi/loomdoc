@@ -5,7 +5,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import { loomDocSchema, type LoomDocOutput } from "./schema.js";
 import type { DocContext, Effort } from "../types.js";
-import type { LoomVideo } from "../ingest/loom.js";
+import type { SourceVideo } from "../ingest/types.js";
 import type { CandidateFrame } from "../frames/winnow.js";
 import { LoomdocError } from "../util/errors.js";
 
@@ -18,12 +18,11 @@ import { LoomdocError } from "../util/errors.js";
  * frame as an image with its own id, so the model's decision is grounded in what's on screen.
  *
  * Screenshots are referenced by id, never re-extracted: `generateDoc` returns the id -> file
- * map so the pipeline ships the exact bytes the model saw (no drift, no post-generation seek
- * against a possibly-expired URL).
+ * map so the pipeline ships the exact bytes the model saw (no timestamp drift from a re-seek).
  */
 
 export interface GenerateInput {
-  video: LoomVideo;
+  video: SourceVideo;
   candidates: CandidateFrame[];
   context?: DocContext;
   model: string;
@@ -138,7 +137,7 @@ export function buildSystemPrompt(context?: DocContext): string {
 
 /** Build the user message: the transcript, then each candidate screenshot (labeled with its id). */
 export async function buildUserContent(
-  video: LoomVideo,
+  video: SourceVideo,
   candidates: CandidateFrame[],
 ): Promise<Array<TextPart | FilePart>> {
   const transcript = video.transcript.map((c) => `[${formatTs(c.start)}] ${c.text}`).join("\n");

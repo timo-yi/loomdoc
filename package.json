@@ -1,7 +1,7 @@
 {
   "name": "loomdoc",
   "version": "0.1.0",
-  "description": "Lightweight CLI that turns a Loom walkthrough into a screenshot-rich, audience-tailored how-to doc (Markdown / Word / PDF).",
+  "description": "Lightweight CLI that turns a Loom or YouTube walkthrough into a screenshot-rich, audience-tailored how-to doc (Markdown / Word / PDF).",
   "type": "module",
   "license": "MIT",
   "author": "Timo Yi",
@@ -31,6 +31,7 @@
   },
   "keywords": [
     "loom",
+    "youtube",
     "documentation",
     "cli",
     "screenshots",

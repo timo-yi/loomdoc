@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { LoomdocError } from "../util/errors.js";
 import { parseVtt } from "../util/vtt.js";
 import { parseJsonTranscript } from "../util/transcript-json.js";
+import { downloadVideoTrack } from "../util/download.js";
+import type { SourceVideo, TranscriptCue } from "./types.js";
 
 /**
  * Loom ingestion (PRD decisions D1, D11).
@@ -20,10 +22,11 @@ import { parseJsonTranscript } from "../util/transcript-json.js";
  *        documented to intermittently return empty/errors, so this CDN fallback matters).
  *   4. GraphQL FetchVideoTranscript -> a VTT captions URL and/or a JSON transcript URL,
  *      fetched and parsed into cues (either format is accepted).
+ *   5. Download the video track into the run's scratch dir right away (PRD D14): the signed
+ *      stream URL expires quickly, and every later frame step then reads from local disk.
  *
  * Header values and endpoint shapes mirror the yt-dlp Loom extractor, the authoritative
- * reference client. Signed CDN URLs expire quickly, so the returned streamUrl must be
- * used promptly within the same run and never cached.
+ * reference client.
  */
 
 const GRAPHQL_ENDPOINT = "https://www.loom.com/graphql";
@@ -31,24 +34,6 @@ const GRAPHQL_ENDPOINT = "https://www.loom.com/graphql";
 // validate it or the Origin header for anti-abuse; this is the first thing to revisit if
 // GraphQL calls start returning 403.
 const APOLLO_VERSION = "45a5bd4";
-
-export interface TranscriptCue {
-  /** Start time in seconds. */
-  start: number;
-  /** End time in seconds. */
-  end: number;
-  text: string;
-}
-
-export interface LoomVideo {
-  id: string;
-  title: string;
-  /** From Loom metadata; falls back to the last transcript cue's end only if absent. */
-  durationSeconds: number;
-  /** Signed HLS (.m3u8) or MP4 URL. Short-lived — do not cache. */
-  streamUrl: string;
-  transcript: TranscriptCue[];
-}
 
 /** Resolve a Loom share/embed URL (or a raw id) into its 32-char hex video id. */
 export function parseLoomUrl(url: string): string {
@@ -68,18 +53,24 @@ export function parseLoomUrl(url: string): string {
   );
 }
 
-/** Fetch metadata, transcript, and a stream URL for a public/unlisted Loom video. */
-export async function fetchLoomVideo(url: string): Promise<LoomVideo> {
+/**
+ * Fetch metadata and transcript for a public/unlisted Loom video, and download its video
+ * track into `scratchDir`.
+ */
+export async function fetchLoomVideo(url: string, scratchDir: string): Promise<SourceVideo> {
   const id = parseLoomUrl(url);
 
   const meta = await fetchMetadata(id);
-  const streamUrl = await fetchStreamUrl(id);
+  // Transcript first: it is the cheap call, and a video without one can't be used, so this
+  // fails before spending time on the download.
   const transcript = await fetchTranscript(id);
+  const streamUrl = await fetchStreamUrl(id);
+  const videoPath = await downloadVideoTrack(streamUrl, scratchDir);
 
   const lastCueEnd = transcript.length > 0 ? transcript[transcript.length - 1]!.end : 0;
   const durationSeconds = meta.duration ?? lastCueEnd;
 
-  return { id, title: meta.title, durationSeconds, streamUrl, transcript };
+  return { source: "loom", id, title: meta.title, durationSeconds, videoPath, transcript };
 }
 
 // --- GraphQL ---------------------------------------------------------------------------
