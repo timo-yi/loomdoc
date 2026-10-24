@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
 import { runLoomdoc } from "./index.js";
-import type { DocContext, Effort, OutputFormat } from "./core/types.js";
+import type { DocContext } from "./core/types.js";
+import { parseEffort, parseOutputFormats, parsePdfLayout } from "./cli-flags.js";
 import { detectSource } from "./core/ingest/index.js";
 import { isStylePresetId, STYLE_PRESET_IDS, STYLE_PRESETS } from "./core/generate/styles.js";
 import { blockingProblems, requirementsFor, type Requirement } from "./setup/checks.js";
@@ -95,10 +96,12 @@ async function main(): Promise<void> {
   if (values.preset !== undefined && !isStylePresetId(values.preset)) {
     throw new Error(`Unknown --preset "${values.preset}". Choose one of: ${STYLE_PRESET_IDS.join(", ")}.`);
   }
-  const pdfLayout = values["pdf-layout"];
-  if (pdfLayout !== undefined && pdfLayout !== "pageless" && pdfLayout !== "paged") {
-    throw new Error(`Unknown --pdf-layout "${pdfLayout}". Choose pageless or paged.`);
-  }
+  // Validate every enum-like flag before preflight or spend: a typo must fail fast, and an
+  // unknown value must never be silently dropped (renderAll ignores formats it doesn't know).
+  const formats = values.formats === undefined ? undefined : parseOutputFormats(values.formats);
+  const pdfLayout = values["pdf-layout"] === undefined ? undefined : parsePdfLayout(values["pdf-layout"]);
+  const effort = values.effort === undefined ? undefined : parseEffort(values.effort);
+
   if (values.preset === "custom" && !values.guidance?.trim()) {
     throw new Error('--preset custom needs --guidance describing the document you want.');
   }
@@ -110,10 +113,6 @@ async function main(): Promise<void> {
     process.stderr.write("\nloomdoc can't run until the items above are fixed.\n");
     process.exit(1);
   }
-
-  const formats = values.formats
-    ? (values.formats.split(",").map((f) => f.trim()).filter(Boolean) as OutputFormat[])
-    : undefined;
 
   const context: DocContext = {
     role: values.role,
@@ -133,7 +132,7 @@ async function main(): Promise<void> {
     formats,
     pdfLayout,
     model: values.model,
-    effort: values.effort as Effort | undefined,
+    effort,
     context,
     onProgress: (e) => process.stderr.write(`› ${e.message}\n`),
   });

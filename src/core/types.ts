@@ -55,15 +55,31 @@ export interface DocContext {
   guidance?: string;
 }
 
-export type OutputFormat = "markdown" | "docx" | "pdf";
+export const OUTPUT_FORMATS = ["markdown", "docx", "pdf"] as const;
+export type OutputFormat = (typeof OUTPUT_FORMATS)[number];
 
 /**
  * PDF page layout (PRD decision D18): "pageless" is one continuous page with no breaks (for
  * reading on screen); "paged" is US Letter pages (for printing).
  */
-export type PdfLayout = "pageless" | "paged";
+export const PDF_LAYOUTS = ["pageless", "paged"] as const;
+export type PdfLayout = (typeof PDF_LAYOUTS)[number];
 
-export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+export const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
+export type Effort = (typeof EFFORT_LEVELS)[number];
+
+/** The single source of truth for these enums: CLI parsing, the UI's zod schema, and defaults. */
+export function isOutputFormat(value: string): value is OutputFormat {
+  return (OUTPUT_FORMATS as readonly string[]).includes(value);
+}
+
+export function isPdfLayout(value: string): value is PdfLayout {
+  return (PDF_LAYOUTS as readonly string[]).includes(value);
+}
+
+export function isEffort(value: string): value is Effort {
+  return (EFFORT_LEVELS as readonly string[]).includes(value);
+}
 
 /**
  * Tunables for the deterministic frame-winnowing step (PRD §4). All are thresholds on the
@@ -146,6 +162,6 @@ export const DEFAULT_FRAME_OPTIONS: FrameOptions = {
 
 export const DEFAULT_MODEL = "claude-sonnet-5";
 export const DEFAULT_EFFORT: Effort = "medium";
-export const DEFAULT_FORMATS: OutputFormat[] = ["markdown", "docx", "pdf"];
+export const DEFAULT_FORMATS: OutputFormat[] = [...OUTPUT_FORMATS];
 export const DEFAULT_PDF_LAYOUT: PdfLayout = "pageless";
 export const DEFAULT_MAX_FRAME_REQUESTS = 10;
