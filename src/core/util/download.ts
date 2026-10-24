@@ -18,6 +18,11 @@ export async function downloadVideoTrack(streamUrl: string, destDir: string): Pr
     "-loglevel",
     "error",
     "-y",
+    // Abort a socket that stops delivering for 15s (microseconds). Covers a plain HTTP stream
+    // stalling mid-body; HLS segment stalls fall back to the runFfmpeg progress watchdog.
+    // Network inputs only — ffmpeg rejects `-timeout` on local-file inputs.
+    "-timeout",
+    "15000000",
     "-i",
     streamUrl,
     "-an",
