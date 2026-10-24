@@ -13,6 +13,8 @@ import {
   DEFAULT_FORMATS,
   DEFAULT_PDF_LAYOUT,
   DEFAULT_MODEL,
+  EFFORT_LEVELS,
+  OUTPUT_FORMATS,
   type LoomdocOptions,
   type LoomdocResult,
   type ProgressStage,
@@ -70,10 +72,10 @@ const runRequestSchema = z.object({
   role: z.string().max(300).optional(),
   industry: z.string().max(300).optional(),
   useCase: z.string().max(300).optional(),
-  formats: z.array(z.enum(["markdown", "docx", "pdf"])).min(1),
+  formats: z.array(z.enum(OUTPUT_FORMATS)).min(1),
   pdfLayout: z.enum(["pageless", "paged"]).optional(),
   model: z.string().trim().max(100).optional(),
-  effort: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
+  effort: z.enum(EFFORT_LEVELS).optional(),
 });
 
 export type RunRequest = z.infer<typeof runRequestSchema>;

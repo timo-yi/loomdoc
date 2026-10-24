@@ -8,6 +8,7 @@
  */
 
 import type { StylePresetId } from "./generate/styles.js";
+import { LoomdocError } from "./util/errors.js";
 
 /** A screenshot embedded in the document. */
 export interface Screenshot {
@@ -55,7 +56,8 @@ export interface DocContext {
   guidance?: string;
 }
 
-export type OutputFormat = "markdown" | "docx" | "pdf";
+export const OUTPUT_FORMATS = ["markdown", "docx", "pdf"] as const;
+export type OutputFormat = (typeof OUTPUT_FORMATS)[number];
 
 /**
  * PDF page layout (PRD decision D18): "pageless" is one continuous page with no breaks (for
@@ -63,7 +65,41 @@ export type OutputFormat = "markdown" | "docx" | "pdf";
  */
 export type PdfLayout = "pageless" | "paged";
 
-export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+export const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
+export type Effort = (typeof EFFORT_LEVELS)[number];
+
+/** The single source of truth for these enums: CLI parsing, the UI's zod schema, and defaults. */
+export function isOutputFormat(value: string): value is OutputFormat {
+  return (OUTPUT_FORMATS as readonly string[]).includes(value);
+}
+
+export function isEffort(value: string): value is Effort {
+  return (EFFORT_LEVELS as readonly string[]).includes(value);
+}
+
+/** Parse a `--formats` list ("markdown,pdf"). Throws with the valid choices on any bad input. */
+export function parseOutputFormats(value: string): OutputFormat[] {
+  const parts = value.split(",").map((f) => f.trim()).filter(Boolean);
+  if (parts.length === 0) {
+    throw new LoomdocError(`--formats needs at least one of: ${OUTPUT_FORMATS.join(", ")}.`);
+  }
+  const unknown = [...new Set(parts.filter((p) => !isOutputFormat(p)))];
+  if (unknown.length > 0) {
+    throw new LoomdocError(
+      `Unknown --formats "${unknown.join(", ")}". Choose from: ${OUTPUT_FORMATS.join(", ")}.`,
+    );
+  }
+  // Dedupe so a typo like "pdf,pdf" doesn't render the same file twice.
+  return [...new Set(parts)] as OutputFormat[];
+}
+
+/** Parse an `--effort` value. Throws with the valid choices on bad input. */
+export function parseEffort(value: string): Effort {
+  if (!isEffort(value)) {
+    throw new LoomdocError(`Unknown --effort "${value}". Choose one of: ${EFFORT_LEVELS.join(", ")}.`);
+  }
+  return value;
+}
 
 /**
  * Tunables for the deterministic frame-winnowing step (PRD §4). All are thresholds on the
@@ -146,6 +182,6 @@ export const DEFAULT_FRAME_OPTIONS: FrameOptions = {
 
 export const DEFAULT_MODEL = "claude-sonnet-5";
 export const DEFAULT_EFFORT: Effort = "medium";
-export const DEFAULT_FORMATS: OutputFormat[] = ["markdown", "docx", "pdf"];
+export const DEFAULT_FORMATS: OutputFormat[] = [...OUTPUT_FORMATS];
 export const DEFAULT_PDF_LAYOUT: PdfLayout = "pageless";
 export const DEFAULT_MAX_FRAME_REQUESTS = 10;
