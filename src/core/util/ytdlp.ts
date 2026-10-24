@@ -1,8 +1,7 @@
-import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { LoomdocError } from "./errors.js";
 import { installedManagedTool, toolCommand } from "./tools.js";
-import { trackChild } from "./children.js";
+import { runTool } from "./run-tool.js";
 import { ytDlpConfigPath } from "./paths.js";
 
 /**
@@ -21,32 +20,17 @@ import { ytDlpConfigPath } from "./paths.js";
  */
 
 /** Run yt-dlp and resolve with its stdout. Rejects with an actionable LoomdocError. */
-export function runYtDlp(args: string[]): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const proc = trackChild(
-      spawn(toolCommand("yt-dlp"), [...configArgs(), ...runtimeArgs(), ...args], { stdio: ["ignore", "pipe", "pipe"] }),
-    );
-    let stdout = "";
-    let stderr = "";
-    proc.stdout.on("data", (chunk) => {
-      stdout += chunk.toString();
-    });
-    proc.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-    });
-    proc.on("error", (err) => {
-      reject(
-        new LoomdocError(
-          `Failed to launch yt-dlp, which loomdoc needs for YouTube videos. Run \`loomdoc doctor\` ` +
-            `to install it. (${err.message})`,
-        ),
-      );
-    });
-    proc.on("close", (code) => {
-      if (code === 0) resolve(stdout);
-      else reject(new LoomdocError(describeYtDlpFailure(stderr, code)));
-    });
+export async function runYtDlp(args: string[]): Promise<string> {
+  const result = await runTool(toolCommand("yt-dlp"), [...configArgs(), ...runtimeArgs(), ...args], {
+    // No idle watchdog: loomdoc passes `--no-progress`, so a healthy multi-minute download is
+    // silent on every pipe. Stalled connections are bounded by yt-dlp's own socket timeout
+    // (default 20s; overridable in loomdoc's yt-dlp config).
+    // stdout carries `-J` metadata JSON, which must arrive whole; only stderr is kept as a tail.
+    maxStdoutBytes: Infinity,
+    launchHint: "loomdoc needs it for YouTube videos; run `loomdoc doctor` to install it.",
   });
+  if (result.code !== 0) throw new LoomdocError(describeYtDlpFailure(result.stderr, result.code));
+  return result.stdout;
 }
 
 function runtimeArgs(): string[] {
