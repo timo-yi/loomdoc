@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type StdioOptions } from "node:child_process";
 import { LoomdocError } from "./errors.js";
 import { trackChild } from "./children.js";
 
@@ -6,8 +6,8 @@ import { trackChild } from "./children.js";
  * Shared runner for the external binaries loomdoc shells out to (ffmpeg, yt-dlp).
  *
  * Two failure modes must never hang or blow up a run: a tool that stalls mid-work
- * (a network stream that stops delivering data) and one that floods its output. So
- * every run gets an idle timeout — killed once it stops proving it is working — and
+ * (a network stream that stops delivering data) and one that floods its output. So a
+ * run can get an idle timeout — killed once it stops proving it is working — and
  * captured output is kept only as a bounded tail.
  *
  * What counts as "proving it is working" is tool-specific, so `isActivity` decides
@@ -64,7 +64,7 @@ export function runTool(command: string, args: string[], options: RunToolOptions
   const isActivity = options.isActivity ?? (() => true);
 
   return new Promise((resolve, reject) => {
-    const stdio = ["ignore", "pipe", "pipe", ...Array.from({ length: extraOutputPipes }, () => "pipe" as const)];
+    const stdio: StdioOptions = ["ignore", "pipe", "pipe", ...Array.from({ length: extraOutputPipes }, () => "pipe" as const)];
     const proc = trackChild(spawn(command, args, { stdio, cwd: options.cwd, env: options.env }));
 
     let stdout = "";
@@ -89,11 +89,11 @@ export function runTool(command: string, args: string[], options: RunToolOptions
     };
 
     function onIdleTimeout(): void {
-      killedOnIdle = true;
       // `proc.kill` returns false once Node has seen the process exit: a run that
       // finished right as the timer fired must resolve with its real result, not be
-      // reported as stalled.
+      // reported as stalled, so the stall is only recorded once the signal was sent.
       if (!proc.kill("SIGTERM")) return;
+      killedOnIdle = true;
       escalationTimer = setTimeout(() => proc.kill("SIGKILL"), SIGKILL_GRACE_MS).unref();
     }
 
