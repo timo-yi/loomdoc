@@ -2,7 +2,7 @@
 import { parseArgs } from "node:util";
 import { runLoomdoc } from "./index.js";
 import type { DocContext } from "./core/types.js";
-import { parseEffort, parseOutputFormats } from "./core/types.js";
+import { parseEffort, parseOutputFormats, parsePdfLayout } from "./cli-flags.js";
 import { detectSource } from "./core/ingest/index.js";
 import { isStylePresetId, STYLE_PRESET_IDS, STYLE_PRESETS } from "./core/generate/styles.js";
 import { blockingProblems, requirementsFor, type Requirement } from "./setup/checks.js";
@@ -96,17 +96,15 @@ async function main(): Promise<void> {
   if (values.preset !== undefined && !isStylePresetId(values.preset)) {
     throw new Error(`Unknown --preset "${values.preset}". Choose one of: ${STYLE_PRESET_IDS.join(", ")}.`);
   }
-  const pdfLayout = values["pdf-layout"];
-  if (pdfLayout !== undefined && pdfLayout !== "pageless" && pdfLayout !== "paged") {
-    throw new Error(`Unknown --pdf-layout "${pdfLayout}". Choose pageless or paged.`);
-  }
-  if (values.preset === "custom" && !values.guidance?.trim()) {
-    throw new Error('--preset custom needs --guidance describing the document you want.');
-  }
   // Validate every enum-like flag before preflight or spend: a typo must fail fast, and an
   // unknown value must never be silently dropped (renderAll ignores formats it doesn't know).
   const formats = values.formats === undefined ? undefined : parseOutputFormats(values.formats);
+  const pdfLayout = values["pdf-layout"] === undefined ? undefined : parsePdfLayout(values["pdf-layout"]);
   const effort = values.effort === undefined ? undefined : parseEffort(values.effort);
+
+  if (values.preset === "custom" && !values.guidance?.trim()) {
+    throw new Error('--preset custom needs --guidance describing the document you want.');
+  }
 
   // Check only what this run needs, before any download or spend.
   const needs = { youtube: detectSource(url) === "youtube" };

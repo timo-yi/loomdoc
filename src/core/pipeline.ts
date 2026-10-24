@@ -6,13 +6,19 @@ import {
   DEFAULT_FRAME_OPTIONS,
   DEFAULT_MAX_FRAME_REQUESTS,
   DEFAULT_MODEL,
+  EFFORT_LEVELS,
   type LoomDoc,
   type LoomdocOptions,
   type LoomdocResult,
+  OUTPUT_FORMATS,
+  PDF_LAYOUTS,
   type Screenshot,
   type FrameOptions,
   type ProgressStage,
   type Step,
+  isEffort,
+  isOutputFormat,
+  isPdfLayout,
 } from "./types.js";
 import { assertFfmpegAvailable } from "./util/ffmpeg.js";
 import { LoomdocError } from "./util/errors.js";
@@ -34,6 +40,7 @@ const IMAGES_DIR = "images";
  */
 export async function runLoomdoc(options: LoomdocOptions): Promise<LoomdocResult> {
   if (!options.url) throw new LoomdocError("A Loom or YouTube video URL is required.");
+  validateEnumOptions(options); // before any preflight, download, or spend
 
   const model = options.model ?? DEFAULT_MODEL;
   const effort = options.effort ?? DEFAULT_EFFORT;
@@ -161,4 +168,30 @@ async function materializeScreenshots(
     audience: output.audience,
     steps,
   };
+}
+
+/**
+ * Validate the enum-like options a caller can pass in. The CLI checks its flags before calling,
+ * but runLoomdoc is public API (PRD D4) and must not trust its input: an unknown format was
+ * silently ignored by renderAll, and an unknown effort or layout reached the model and renderer.
+ * Runs before any preflight, download, or spend. Messages are library-flavored — no CLI flags.
+ */
+function validateEnumOptions(options: LoomdocOptions): void {
+  if (options.formats !== undefined) {
+    if (options.formats.length === 0) {
+      throw new LoomdocError(`formats needs at least one of: ${OUTPUT_FORMATS.join(", ")}.`);
+    }
+    const unknown = [...new Set(options.formats.filter((f) => !isOutputFormat(f)))];
+    if (unknown.length > 0) {
+      throw new LoomdocError(
+        `Unknown output format "${unknown.join(", ")}". Choose from: ${OUTPUT_FORMATS.join(", ")}.`,
+      );
+    }
+  }
+  if (options.pdfLayout !== undefined && !isPdfLayout(options.pdfLayout)) {
+    throw new LoomdocError(`Unknown PDF layout "${options.pdfLayout}". Choose one of: ${PDF_LAYOUTS.join(", ")}.`);
+  }
+  if (options.effort !== undefined && !isEffort(options.effort)) {
+    throw new LoomdocError(`Unknown effort "${options.effort}". Choose one of: ${EFFORT_LEVELS.join(", ")}.`);
+  }
 }

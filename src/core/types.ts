@@ -8,7 +8,6 @@
  */
 
 import type { StylePresetId } from "./generate/styles.js";
-import { LoomdocError } from "./util/errors.js";
 
 /** A screenshot embedded in the document. */
 export interface Screenshot {
@@ -63,7 +62,8 @@ export type OutputFormat = (typeof OUTPUT_FORMATS)[number];
  * PDF page layout (PRD decision D18): "pageless" is one continuous page with no breaks (for
  * reading on screen); "paged" is US Letter pages (for printing).
  */
-export type PdfLayout = "pageless" | "paged";
+export const PDF_LAYOUTS = ["pageless", "paged"] as const;
+export type PdfLayout = (typeof PDF_LAYOUTS)[number];
 
 export const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
 export type Effort = (typeof EFFORT_LEVELS)[number];
@@ -73,32 +73,12 @@ export function isOutputFormat(value: string): value is OutputFormat {
   return (OUTPUT_FORMATS as readonly string[]).includes(value);
 }
 
+export function isPdfLayout(value: string): value is PdfLayout {
+  return (PDF_LAYOUTS as readonly string[]).includes(value);
+}
+
 export function isEffort(value: string): value is Effort {
   return (EFFORT_LEVELS as readonly string[]).includes(value);
-}
-
-/** Parse a `--formats` list ("markdown,pdf"). Throws with the valid choices on any bad input. */
-export function parseOutputFormats(value: string): OutputFormat[] {
-  const parts = value.split(",").map((f) => f.trim()).filter(Boolean);
-  if (parts.length === 0) {
-    throw new LoomdocError(`--formats needs at least one of: ${OUTPUT_FORMATS.join(", ")}.`);
-  }
-  const unknown = [...new Set(parts.filter((p) => !isOutputFormat(p)))];
-  if (unknown.length > 0) {
-    throw new LoomdocError(
-      `Unknown --formats "${unknown.join(", ")}". Choose from: ${OUTPUT_FORMATS.join(", ")}.`,
-    );
-  }
-  // Dedupe so a typo like "pdf,pdf" doesn't render the same file twice.
-  return [...new Set(parts)] as OutputFormat[];
-}
-
-/** Parse an `--effort` value. Throws with the valid choices on bad input. */
-export function parseEffort(value: string): Effort {
-  if (!isEffort(value)) {
-    throw new LoomdocError(`Unknown --effort "${value}". Choose one of: ${EFFORT_LEVELS.join(", ")}.`);
-  }
-  return value;
 }
 
 /**
