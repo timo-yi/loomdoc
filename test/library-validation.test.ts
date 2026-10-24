@@ -7,6 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { runLoomdoc } from "../src/index.js";
+import { checkOutputFormats } from "../src/core/options.js";
 
 const url = "https://example.invalid/watch?v=nope";
 
@@ -14,12 +15,24 @@ test("runLoomdoc rejects unknown output formats before doing any work", async ()
   // Casts simulate a JavaScript caller bypassing the TS types.
   await assert.rejects(
     runLoomdoc({ url, formats: ["markdown", "docm"] as unknown as never }),
-    /Unknown output format "docm"\. Choose from: markdown, docx, pdf\./,
+    /Unknown formats "docm"\. Choose from: markdown, docx, pdf\./,
   );
 });
 
 test("runLoomdoc rejects an empty formats list", async () => {
   await assert.rejects(runLoomdoc({ url, formats: [] }), /formats needs at least one/);
+});
+
+test("runLoomdoc rejects a formats value that is not a list", async () => {
+  await assert.rejects(
+    runLoomdoc({ url, formats: "pdf" as unknown as never }),
+    /formats must be a list of: markdown, docx, pdf\./,
+  );
+});
+
+test("checkOutputFormats dedupes and names every unknown entry once", () => {
+  assert.deepEqual(checkOutputFormats(["pdf", "markdown", "pdf"], "formats"), ["pdf", "markdown"]);
+  assert.throws(() => checkOutputFormats(["docm", 3, "docm"], "formats"), /Unknown formats "docm, 3"/);
 });
 
 test("runLoomdoc rejects unknown effort and PDF layout", async () => {

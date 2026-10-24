@@ -8,31 +8,19 @@
 
 import {
   EFFORT_LEVELS,
-  OUTPUT_FORMATS,
   PDF_LAYOUTS,
   type Effort,
   type OutputFormat,
   type PdfLayout,
   isEffort,
-  isOutputFormat,
   isPdfLayout,
 } from "./core/types.js";
+import { checkOutputFormats } from "./core/options.js";
 import { LoomdocError } from "./core/util/errors.js";
 
 /** Parse a `--formats` list ("markdown,pdf"). Throws with the valid choices on any bad input. */
 export function parseOutputFormats(value: string): OutputFormat[] {
-  const parts = value.split(",").map((f) => f.trim()).filter(Boolean);
-  if (parts.length === 0) {
-    throw new LoomdocError(`--formats needs at least one of: ${OUTPUT_FORMATS.join(", ")}.`);
-  }
-  const unknown = [...new Set(parts.filter((p) => !isOutputFormat(p)))];
-  if (unknown.length > 0) {
-    throw new LoomdocError(
-      `Unknown --formats "${unknown.join(", ")}". Choose from: ${OUTPUT_FORMATS.join(", ")}.`,
-    );
-  }
-  // Dedupe so a typo like "pdf,pdf" doesn't render the same file twice.
-  return [...new Set(parts)] as OutputFormat[];
+  return checkOutputFormats(value.split(",").map((f) => f.trim()).filter(Boolean), "--formats");
 }
 
 /** Parse a `--pdf-layout` value. Throws with the valid choices on bad input. */
