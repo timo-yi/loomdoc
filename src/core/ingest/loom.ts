@@ -104,7 +104,10 @@ async function graphql<T>(operationName: string, query: string, variables: unkno
   try {
     json = (await res.json()) as typeof json;
   } catch (err) {
-    throw new LoomdocError("SOURCE_UNAVAILABLE", `Loom GraphQL ${operationName} did not return JSON.`, { cause: err });
+    if (err instanceof SyntaxError) {
+      throw new LoomdocError("SOURCE_UNAVAILABLE", `Loom GraphQL ${operationName} did not return JSON.`, { cause: err });
+    }
+    throw new LoomdocError("NETWORK", `Network error reading Loom's reply (${operationName}): ${asMessage(err)}`, { cause: err });
   }
   if (json.errors?.length) {
     throw new LoomdocError("SOURCE_UNAVAILABLE", `Loom GraphQL ${operationName} error: ${json.errors[0]?.message ?? "unknown"}`);
@@ -246,6 +249,12 @@ async function fetchTranscript(id: string): Promise<TranscriptCue[]> {
   const urls = [details?.captions_source_url, details?.source_url].filter(
     (u): u is string => typeof u === "string" && u.length > 0,
   );
+  // A reply that is neither transcript details nor a GenericError (e.g. InvalidRequestWarning)
+  // means Loom will not serve the video at all, not that it lacks a transcript.
+  const kind = details?.__typename;
+  if (urls.length === 0 && kind && kind !== "VideoTranscriptDetails" && kind !== "GenericError") {
+    throw new LoomdocError("SOURCE_UNAVAILABLE", `Loom could not find this video, or it is not public (${kind}).`);
+  }
   if (urls.length === 0) {
     throw new LoomdocError(
       "NO_TRANSCRIPT",

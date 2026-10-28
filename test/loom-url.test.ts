@@ -61,3 +61,25 @@ test("a Loom reply that is not JSON rejects with SOURCE_UNAVAILABLE, not a Synta
     return true;
   });
 });
+
+test("a Loom video that does not exist rejects with SOURCE_UNAVAILABLE, not NO_TRANSCRIPT", async (t) => {
+  t.mock.method(globalThis, "fetch", async () =>
+    Response.json({ data: { getVideo: null, fetchVideoTranscript: { __typename: "InvalidRequestWarning" } } }),
+  );
+  await assert.rejects(fetchLoomVideo(`https://www.loom.com/share/${ID}`, "/nonexistent"), { name: "LoomdocError", code: "SOURCE_UNAVAILABLE" });
+});
+
+test("a Loom video with no transcript still rejects with NO_TRANSCRIPT", async (t) => {
+  t.mock.method(globalThis, "fetch", async () =>
+    Response.json({ data: { getVideo: null, fetchVideoTranscript: { __typename: "VideoTranscriptDetails", captions_source_url: null, source_url: null } } }),
+  );
+  await assert.rejects(fetchLoomVideo(`https://www.loom.com/share/${ID}`, "/nonexistent"), { name: "LoomdocError", code: "NO_TRANSCRIPT" });
+});
+
+test("a connection reset while reading Loom's reply rejects with NETWORK", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => {
+    const body = new ReadableStream({ start: (c) => c.error(new TypeError("terminated")) });
+    return new Response(body, { status: 200 });
+  });
+  await assert.rejects(fetchLoomVideo(`https://www.loom.com/share/${ID}`, "/nonexistent"), { name: "LoomdocError", code: "NETWORK" });
+});
