@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { request } from "node:http";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startUiServer, type UiServer } from "../src/ui/server.js";
@@ -178,6 +178,17 @@ test("a run passes preset, guidance, and formats through and streams progress to
       assert.ok(r.status === 403 || r.status === 404, `${evil} -> ${r.status}`);
       assert.notEqual(r.body, "outside");
     }
+    // So is a symlink that resolves outside it. One that resolves inside it is served.
+    await symlink(join(s.dir, "secret.md"), join(s.outputDir, "leak.md"));
+    await symlink("document.md", join(s.outputDir, "alias.md"));
+    const leak = await send(s.server.port, `/files/${id}/leak.md`, { headers: { cookie: s.cookie } });
+    assert.equal(leak.status, 403);
+    assert.notEqual(leak.body, "outside");
+    const alias = await send(s.server.port, `/files/${id}/alias.md`, { headers: { cookie: s.cookie } });
+    assert.equal(alias.status, 200);
+    assert.equal(alias.body, "# Doc\n");
+    const missing = await send(s.server.port, `/files/${id}/missing.md`, { headers: { cookie: s.cookie } });
+    assert.equal(missing.status, 404);
   } finally {
     await s.server.close();
     await rm(s.dir, { recursive: true, force: true });
