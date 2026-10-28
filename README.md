@@ -287,6 +287,11 @@ Deferred by design (see the PRD): Google Docs export, PowerPoint decks, batch in
 workspace-private Loom auth, Sonnet to Opus auto-escalation, and packaging as a Vercel AI SDK
 tool or Claude Code plugin. The architecture keeps each of these low-friction to add.
 
+## Contributing
+
+To set up the repo, run the checks, or add a source, format, style, or option, read
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## License
 
 [MIT](LICENSE)
