@@ -273,8 +273,21 @@ test("config lists every core option in order, so the page hard-codes none", asy
     assert.ok(options.formats.every((f) => f.extension.startsWith(".")));
     assert.deepEqual(options.limits, { url: 2048, guidance: 4000, contextField: 300, model: 100 });
     assert.equal(config.defaults.preset, DEFAULT_PRESET);
-    const tooLong = JSON.stringify({ url: "https://www.loom.com/share/abc", preset: "how-to", guidance: "x".repeat(options.limits.guidance! + 1), formats: ["pdf"] });
-    assert.equal((await postRun(s, tooLong)).status, 400, "the server enforces the limits it sends");
+    const valid = { url: "https://www.loom.com/share/abc", preset: "how-to", formats: ["pdf"] };
+    const limitOf: Record<string, number> = {
+      url: options.limits.url!,
+      guidance: options.limits.guidance!,
+      audience: options.limits.contextField!,
+      role: options.limits.contextField!,
+      industry: options.limits.contextField!,
+      useCase: options.limits.contextField!,
+      model: options.limits.model!,
+    };
+    for (const [field, limit] of Object.entries(limitOf)) {
+      const tooLong = JSON.stringify({ ...valid, [field]: "x".repeat(limit + 1) });
+      assert.equal((await postRun(s, tooLong)).status, 400, `the server enforces the ${field} limit it sends`);
+    }
+    assert.notEqual((await postRun(s, JSON.stringify(valid))).status, 400, "the base request is valid");
   } finally {
     await s.server.close();
     await rm(s.dir, { recursive: true, force: true });
