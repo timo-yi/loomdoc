@@ -29,6 +29,7 @@ import { winnowFrames } from "./frames/winnow.js";
 import { extractFrameAt } from "./frames/extract.js";
 import { formatTs, generateDoc } from "./generate/generate.js";
 import type { LoomDocOutput } from "./generate/schema.js";
+import { isMissingGuidance, isStylePresetId, STYLE_PRESET_IDS, STYLE_PRESETS } from "./generate/styles.js";
 import { renderAll } from "./render/index.js";
 
 const IMAGES_DIR = "images";
@@ -39,7 +40,7 @@ const IMAGES_DIR = "images";
  */
 export async function runLoomdoc(options: LoomdocOptions): Promise<LoomdocResult> {
   if (!options.url) throw new LoomdocError("A Loom or YouTube video URL is required.");
-  validateEnumOptions(options); // before any preflight, download, or spend
+  validateOptions(options); // before any preflight, download, or spend
 
   const model = options.model ?? DEFAULT_MODEL;
   const effort = options.effort ?? DEFAULT_EFFORT;
@@ -170,17 +171,26 @@ async function materializeScreenshots(
 }
 
 /**
- * Validate the enum-like options a caller can pass in. The CLI checks its flags before calling,
- * but runLoomdoc is public API (PRD D4) and must not trust its input: an unknown effort or layout
- * reached the model and renderer. (`formats` goes through checkOutputFormats in runLoomdoc, which
- * also dedupes it.) Runs before any preflight, download, or spend. Messages are library-flavored
- * — no CLI flags.
+ * Validate the enum-like options and the style a caller can pass in. The CLI and the UI check
+ * their input before calling, but runLoomdoc is public API (PRD D4) and must not trust its input:
+ * an unknown effort or layout reached the model and renderer, and an unknown preset crashed
+ * prompt building after the download. (`formats` goes through checkOutputFormats in runLoomdoc,
+ * which also dedupes it.) Runs before any preflight, download, or spend. Messages are
+ * library-flavored — no CLI flags.
  */
-function validateEnumOptions(options: LoomdocOptions): void {
+function validateOptions(options: LoomdocOptions): void {
   if (options.pdfLayout !== undefined && !isPdfLayout(options.pdfLayout)) {
     throw new LoomdocError(`Unknown PDF layout "${options.pdfLayout}". Choose one of: ${PDF_LAYOUTS.join(", ")}.`);
   }
   if (options.effort !== undefined && !isEffort(options.effort)) {
     throw new LoomdocError(`Unknown effort "${options.effort}". Choose one of: ${EFFORT_LEVELS.join(", ")}.`);
+  }
+  const preset = options.context?.preset;
+  if (preset === undefined) return;
+  if (!isStylePresetId(preset)) {
+    throw new LoomdocError(`Unknown preset "${preset}". Choose one of: ${STYLE_PRESET_IDS.join(", ")}.`);
+  }
+  if (isMissingGuidance(preset, options.context?.guidance)) {
+    throw new LoomdocError(`The ${STYLE_PRESETS[preset].label} style needs guidance describing the document you want.`);
   }
 }

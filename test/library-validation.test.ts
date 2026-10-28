@@ -46,9 +46,32 @@ test("runLoomdoc rejects unknown effort and PDF layout", async () => {
   );
 });
 
+test("runLoomdoc rejects an unknown preset, including a retired one", async () => {
+  await assert.rejects(
+    runLoomdoc({ url, context: { preset: "training" as unknown as never } }),
+    /Unknown preset "training"\. Choose one of: tutorial, how-to, /,
+  );
+});
+
+test("runLoomdoc rejects a preset that needs guidance when none is given", async () => {
+  for (const guidance of [undefined, "", "   "]) {
+    await assert.rejects(
+      runLoomdoc({ url, context: { preset: "custom", guidance } }),
+      /The Custom style needs guidance describing the document you want\./,
+    );
+  }
+});
+
 test("library errors never leak CLI flag names", async () => {
-  await assert.rejects(runLoomdoc({ url, formats: ["nope"] as unknown as never }), (err: Error) => {
-    assert.ok(!err.message.includes("--"), `message leaks a CLI flag: ${err.message}`);
-    return true;
-  });
+  const invalid = [
+    { url, formats: ["nope"] as unknown as never },
+    { url, context: { preset: "nope" as unknown as never } },
+    { url, context: { preset: "custom" as const } },
+  ];
+  for (const options of invalid) {
+    await assert.rejects(runLoomdoc(options), (err: Error) => {
+      assert.ok(!err.message.includes("--"), `message leaks a CLI flag: ${err.message}`);
+      return true;
+    });
+  }
 });

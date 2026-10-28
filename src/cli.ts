@@ -4,7 +4,7 @@ import { runLoomdoc } from "./index.js";
 import type { DocContext } from "./core/types.js";
 import { parseEffort, parseOutputFormats, parsePdfLayout } from "./cli-flags.js";
 import { detectSource } from "./core/ingest/index.js";
-import { isStylePresetId, STYLE_PRESET_IDS, STYLE_PRESETS } from "./core/generate/styles.js";
+import { isMissingGuidance, isStylePresetId, STYLE_PRESET_IDS } from "./core/generate/styles.js";
 import { blockingProblems, requirementsFor, type Requirement } from "./setup/checks.js";
 import { isInteractiveTerminal, runPreflight, terminalIO } from "./setup/preflight.js";
 import { startUiServer } from "./ui/server.js";
@@ -108,8 +108,8 @@ async function main(): Promise<void> {
   const pdfLayout = values["pdf-layout"] === undefined ? undefined : parsePdfLayout(values["pdf-layout"]);
   const effort = values.effort === undefined ? undefined : parseEffort(values.effort);
 
-  if (values.preset === "custom" && !values.guidance?.trim()) {
-    throw new Error('--preset custom needs --guidance describing the document you want.');
+  if (values.preset !== undefined && isMissingGuidance(values.preset, values.guidance)) {
+    throw new Error(`--preset ${values.preset} needs --guidance describing the document you want.`);
   }
 
   // Check only what this run needs, before any download or spend.
@@ -128,7 +128,7 @@ async function main(): Promise<void> {
     useCase: values["use-case"],
     intent: values.intent,
     style: values.style,
-    preset: values.preset as DocContext["preset"],
+    preset: values.preset,
     guidance: values.guidance,
   };
 

@@ -47,6 +47,8 @@ export interface StylePreset {
   instructions: string[];
   /** Set on the four technical-writing presets; they also get TECHNICAL_WRITING_RULES. */
   diataxis?: DiataxisInfo;
+  /** The preset has no content of its own, so a run without guidance has nothing to steer it. */
+  requiresGuidance?: boolean;
 }
 
 export const DEFAULT_PRESET: StylePresetId = "how-to";
@@ -189,6 +191,7 @@ export const STYLE_PRESETS: Record<StylePresetId, StylePreset> = {
     id: "custom",
     label: "Custom",
     summary: "Describe the document you want in your own words.",
+    requiresGuidance: true,
     documentType: "the document described in the direction below",
     instructions: [
       "Take the document's purpose, reader, structure, and tone from the person's direction below. Where it is silent, choose what best serves that purpose.",
@@ -198,4 +201,9 @@ export const STYLE_PRESETS: Record<StylePresetId, StylePreset> = {
 
 export function isStylePresetId(value: string): value is StylePresetId {
   return (STYLE_PRESET_IDS as readonly string[]).includes(value);
+}
+
+/** True when `preset` needs guidance and `guidance` is missing or blank. */
+export function isMissingGuidance(preset: StylePresetId, guidance: string | undefined): boolean {
+  return STYLE_PRESETS[preset].requiresGuidance === true && !guidance?.trim();
 }

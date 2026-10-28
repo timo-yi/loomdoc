@@ -7,7 +7,7 @@ import type { AddressInfo } from "node:net";
 import { extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import { runLoomdoc } from "../core/pipeline.js";
-import { STYLE_PRESET_IDS, STYLE_PRESETS } from "../core/generate/styles.js";
+import { isMissingGuidance, STYLE_PRESET_IDS, STYLE_PRESETS } from "../core/generate/styles.js";
 import {
   DEFAULT_EFFORT,
   DEFAULT_FORMATS,
@@ -190,7 +190,13 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       sendJson(res, 200, {
         presets: STYLE_PRESET_IDS.map((id) => {
           const p = STYLE_PRESETS[id];
-          return { id: p.id, label: p.label, summary: p.summary, diataxis: p.diataxis ?? null };
+          return {
+            id: p.id,
+            label: p.label,
+            summary: p.summary,
+            diataxis: p.diataxis ?? null,
+            requiresGuidance: p.requiresGuidance === true,
+          };
         }),
         defaults: { formats: DEFAULT_FORMATS, pdfLayout: DEFAULT_PDF_LAYOUT, model: DEFAULT_MODEL, effort: DEFAULT_EFFORT },
         notices: options.setupNotices ? await options.setupNotices() : [],
@@ -210,8 +216,9 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
         return;
       }
       const body = parsed.data;
-      if (body.preset === "custom" && !body.guidance?.trim()) {
-        sendJson(res, 400, { error: "The Custom style needs guidance describing the document you want." });
+      if (isMissingGuidance(body.preset, body.guidance)) {
+        const label = STYLE_PRESETS[body.preset].label;
+        sendJson(res, 400, { error: `The ${label} style needs guidance describing the document you want.` });
         return;
       }
       if (slotTaken) {

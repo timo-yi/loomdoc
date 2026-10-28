@@ -338,6 +338,15 @@ export const APP_JS = `
     return checked ? checked.value : "how-to";
   }
 
+  /** The preset with this id if it needs guidance, else null. */
+  function presetNeedingGuidance(id) {
+    var presets = config ? config.presets : [];
+    for (var i = 0; i < presets.length; i++) {
+      if (presets[i].id === id) return presets[i].requiresGuidance ? presets[i] : null;
+    }
+    return null;
+  }
+
   function renderPresets(presets, current) {
     presetsBox.textContent = "";
     // A saved preference can name a preset that no longer exists (e.g. the old "training" or "support-article").
@@ -380,9 +389,9 @@ export const APP_JS = `
     presetsBox.querySelectorAll(".preset").forEach(function (label) {
       label.classList.toggle("selected", label.querySelector("input").checked);
     });
-    var custom = selectedPreset() === "custom";
-    $("guidance-optional").textContent = custom ? "(required for Custom)" : "(optional)";
-    $("guidance-hint").textContent = custom
+    var required = presetNeedingGuidance(selectedPreset());
+    $("guidance-optional").textContent = required ? "(required for " + required.label + ")" : "(optional)";
+    $("guidance-hint").textContent = required
       ? "Describe the document you want: its purpose, who reads it, how it should be structured, and the tone."
       : "Anything the AI should know or do: who it is for, what to emphasize or skip, tone, terminology.";
   }
@@ -427,7 +436,8 @@ export const APP_JS = `
       return "That doesn't look like a link. Paste the full Loom or YouTube URL.";
     }
     if (body.formats.length === 0) return "Pick at least one output format.";
-    if (body.preset === "custom" && !body.guidance.trim()) return "The Custom style needs guidance describing the document you want.";
+    var required = presetNeedingGuidance(body.preset);
+    if (required && !body.guidance.trim()) return "The " + required.label + " style needs guidance describing the document you want.";
     return "";
   }
 
