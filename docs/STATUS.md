@@ -26,7 +26,7 @@ modules get implemented. See [`PRD.md`](PRD.md) for the design and rationale.
 | `src/setup/install.ts` | ✅ done | ffmpeg via package manager; checksum-verified yt-dlp/Deno downloads. |
 | `src/setup/preflight.ts` | ✅ done | Consent-gated fix flow; `loomdoc doctor` and per-run checks. |
 | `src/core/generate/styles.ts` | ✅ done | Document style presets (D16), folded into the system prompt with guidance. |
-| `src/ui/server.ts` | ✅ done | `loomdoc ui` server: auth, runs, SSE progress, output file serving (D17). |
+| `src/ui/server.ts` | ✅ done | `loomdoc ui` server: auth, runs, SSE progress, output file serving contained by real path, so symlinks can't escape the run folder (D17). |
 | `src/ui/page.ts` | ✅ done | The single-page UI (HTML, CSS, script). |
 | `src/ui/open.ts` | ✅ done | Opens the browser / file manager. |
 | `src/core/pipeline.ts` | ✅ wired | Orchestrates all stages; throws at the first unimplemented stage. |

@@ -9,7 +9,7 @@ The page posts the form to `POST /api/runs`. The server validates the body, allo
 - `runs-single-slot` returns 409 for a second POST while a run is active.
 - `runs-events` streams `progress` events, then ends with exactly one `done` or `error` event.
 - `runs-slot-release` sets `activeRunId` back to `null` once a run ends.
-- `runs-files` serves only files inside the run's output dir, returning 404 for unknown runs and 403 for traversal or other file types.
+- `runs-files` serves only files inside the run's output dir, returning 404 for unknown runs and 403 for traversal, other file types, or a symlink that resolves outside the folder.
 
 ## How to get to it (user POV)
 
@@ -38,4 +38,4 @@ Preconditions:
 
 - The ingest failure in the no-spend start needs network access to loom.com. Offline, the error message differs, but 202, 409, and the slot release should still hold.
 - `post /api/runs` with a real key is refused unless `LOOMDOC_VERIFY_ALLOW_SPEND=1`. Do not set it for this feature, because a nonexistent video is enough.
-- Proving 403 for traversal or other file types under `/files/` needs a completed run (`record.outputDir` set). Only a paid run gets there, so it is covered by [Generate a document](./generate.md) and by `test/ui-server.test.ts`.
+- Proving 403 for traversal, other file types, or an escaping symlink under `/files/` needs a completed run (`record.outputDir` set). Only a paid run gets there, so it is covered by [Generate a document](./generate.md) and by `test/ui-server.test.ts`. Containment is checked on real paths, so a symlink to a file inside the folder is still served.

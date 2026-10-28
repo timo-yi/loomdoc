@@ -29,7 +29,7 @@ Preconditions:
 - **Files.** Run `ls -R "$LOOMDOC_RUN/out"`. It shows one `<slug>/` dir with `document.md`, `document.pdf`, and `images/step-NN.*`.
 - **Content.** Read `document.md`. Its steps match what the video shows and says, and every image it links exists in `images/`.
 - **Scratch.** Run `ls -d "${TMPDIR%/}"/loomdoc-* 2>/dev/null`. No dir is left from this run.
-- **UI run.** With `start-ui` (real key), `login`, and `LOOMDOC_VERIFY_ALLOW_SPEND=1`, run `control-loomdoc post /api/runs '{"url":"<url>","preset":"how-to","formats":["markdown"]}'` to get `202`. Then run `control-loomdoc get /api/runs/<id>/events`. The stream ends with `"type":"done"` and a `result.files` entry for `document.md`. Then run `control-loomdoc get /files/<id>/document.md` to get `200` and the Markdown. Run `control-loomdoc get /files/<id>/../../etc/passwd` to get `403` or `404`, never the file.
+- **UI run.** With `start-ui` (real key), `login`, and `LOOMDOC_VERIFY_ALLOW_SPEND=1`, run `control-loomdoc post /api/runs '{"url":"<url>","preset":"how-to","formats":["markdown"]}'` to get `202`. Then run `control-loomdoc get /api/runs/<id>/events`. The stream ends with `"type":"done"` and a `result.files` entry for `document.md`. Then run `control-loomdoc get /files/<id>/document.md` to get `200` and the Markdown. Run `control-loomdoc get /files/<id>/../../etc/passwd` to get `403` or `404`, never the file. Then run `ln -s /etc/hosts "$LOOMDOC_RUN/out/<slug>/leak.md"` and `control-loomdoc get /files/<id>/leak.md` to get `403`, then delete the link.
 - **Proof.** Keep the `cli-NN.*` and `http-NN.*` files plus `out/`. Cleanup keeps all of them.
 
 ## Gotchas
