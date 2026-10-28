@@ -49,7 +49,7 @@ export function configArgs(configPath: string = ytDlpConfigPath()): string[] {
   return args;
 }
 
-const VIDEO_UNAVAILABLE = /private video|members-only|join this channel|video unavailable/i;
+const VIDEO_UNAVAILABLE = /private video|members-only|join this channel|video (is )?unavailable/i;
 
 /** A video YouTube will not serve is the source's problem; anything else is yt-dlp's. */
 export function ytDlpFailureCode(stderr: string): LoomdocErrorCode {

@@ -246,6 +246,12 @@ async function fetchTranscript(id: string): Promise<TranscriptCue[]> {
   const urls = [details?.captions_source_url, details?.source_url].filter(
     (u): u is string => typeof u === "string" && u.length > 0,
   );
+  // A reply that is neither transcript details nor a GenericError (e.g. InvalidRequestWarning)
+  // means Loom will not serve the video at all, not that it lacks a transcript.
+  const kind = details?.__typename;
+  if (urls.length === 0 && kind && kind !== "VideoTranscriptDetails" && kind !== "GenericError") {
+    throw new LoomdocError("SOURCE_UNAVAILABLE", `Loom could not find this video, or it is not public (${kind}).`);
+  }
   if (urls.length === 0) {
     throw new LoomdocError(
       "NO_TRANSCRIPT",

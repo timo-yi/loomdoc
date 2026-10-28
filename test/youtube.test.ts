@@ -170,6 +170,7 @@ test("maps yt-dlp failures to actionable hints", () => {
 test("a video YouTube will not serve is SOURCE_UNAVAILABLE; other yt-dlp failures are TOOL_FAILED", () => {
   assert.equal(ytDlpFailureCode("ERROR: [youtube] abc: Private video. Sign in"), "SOURCE_UNAVAILABLE");
   assert.equal(ytDlpFailureCode("ERROR: [youtube] abc: Video unavailable. This video has been removed"), "SOURCE_UNAVAILABLE");
+  assert.equal(ytDlpFailureCode("ERROR: [youtube] 00000000000: This video is unavailable"), "SOURCE_UNAVAILABLE");
   assert.equal(ytDlpFailureCode("ERROR: [youtube] abc: Join this channel to get access to members-only content"), "SOURCE_UNAVAILABLE");
   assert.equal(ytDlpFailureCode("ERROR: unable to download: HTTP Error 403: Forbidden"), "TOOL_FAILED");
   assert.equal(ytDlpFailureCode("ERROR: [youtube] abc: Sign in to confirm you’re not a bot"), "TOOL_FAILED");
