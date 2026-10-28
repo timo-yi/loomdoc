@@ -7,7 +7,7 @@ import type { AddressInfo } from "node:net";
 import { extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import { runLoomdoc } from "../core/pipeline.js";
-import { isMissingGuidance, STYLE_PRESET_IDS, STYLE_PRESETS } from "../core/generate/styles.js";
+import { DEFAULT_PRESET, isMissingGuidance, STYLE_PRESET_IDS, STYLE_PRESETS } from "../core/generate/styles.js";
 import {
   DEFAULT_EFFORT,
   DEFAULT_FORMATS,
@@ -16,11 +16,13 @@ import {
   EFFORT_LEVELS,
   OUTPUT_FORMATS,
   PDF_LAYOUTS,
+  PROGRESS_STAGES,
   type LoomdocOptions,
   type LoomdocResult,
   type ProgressStage,
 } from "../core/types.js";
 import { LoomdocError, type LoomdocErrorCode } from "../core/util/errors.js";
+import { EFFORT_LABELS, FIELD_LIMITS, FORMAT_DISPLAY, PDF_LAYOUT_LABELS, STAGE_LABELS } from "./options.js";
 import { APP_CSS, APP_JS, FAVICON_SVG, pageHtml, unauthorizedHtml } from "./page.js";
 import { revealInFileManager } from "./open.js";
 
@@ -67,16 +69,16 @@ export interface UiServer {
 }
 
 const runRequestSchema = z.object({
-  url: z.string().trim().min(1).max(2048),
+  url: z.string().trim().min(1).max(FIELD_LIMITS.url),
   preset: z.enum(STYLE_PRESET_IDS),
-  guidance: z.string().max(4000).optional(),
-  audience: z.string().max(300).optional(),
-  role: z.string().max(300).optional(),
-  industry: z.string().max(300).optional(),
-  useCase: z.string().max(300).optional(),
+  guidance: z.string().max(FIELD_LIMITS.guidance).optional(),
+  audience: z.string().max(FIELD_LIMITS.contextField).optional(),
+  role: z.string().max(FIELD_LIMITS.contextField).optional(),
+  industry: z.string().max(FIELD_LIMITS.contextField).optional(),
+  useCase: z.string().max(FIELD_LIMITS.contextField).optional(),
   formats: z.array(z.enum(OUTPUT_FORMATS)).min(1),
   pdfLayout: z.enum(PDF_LAYOUTS).optional(),
-  model: z.string().trim().max(100).optional(),
+  model: z.string().trim().max(FIELD_LIMITS.model).optional(),
   effort: z.enum(EFFORT_LEVELS).optional(),
 });
 
@@ -200,7 +202,20 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
             requiresGuidance: p.requiresGuidance === true,
           };
         }),
-        defaults: { formats: DEFAULT_FORMATS, pdfLayout: DEFAULT_PDF_LAYOUT, model: DEFAULT_MODEL, effort: DEFAULT_EFFORT },
+        options: {
+          formats: OUTPUT_FORMATS.map((id) => ({ id, label: FORMAT_DISPLAY[id].label, extension: FORMAT_DISPLAY[id].extension })),
+          pdfLayouts: PDF_LAYOUTS.map((id) => ({ id, label: PDF_LAYOUT_LABELS[id] })),
+          efforts: EFFORT_LEVELS.map((id) => ({ id, label: EFFORT_LABELS[id] })),
+          stages: PROGRESS_STAGES.map((id) => ({ id, label: STAGE_LABELS[id] })),
+          limits: FIELD_LIMITS,
+        },
+        defaults: {
+          preset: DEFAULT_PRESET,
+          formats: DEFAULT_FORMATS,
+          pdfLayout: DEFAULT_PDF_LAYOUT,
+          model: DEFAULT_MODEL,
+          effort: DEFAULT_EFFORT,
+        },
         notices: options.setupNotices ? await options.setupNotices() : [],
         activeRunId,
       });
@@ -378,9 +393,7 @@ function streamEvents(req: IncomingMessage, res: ServerResponse, record: RunReco
 }
 
 const CONTENT_TYPES: Record<string, string> = {
-  ".md": "text/markdown; charset=utf-8",
-  ".pdf": "application/pdf",
-  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ...Object.fromEntries(OUTPUT_FORMATS.map((f) => [FORMAT_DISPLAY[f].extension, FORMAT_DISPLAY[f].contentType])),
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
