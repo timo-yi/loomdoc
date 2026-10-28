@@ -102,8 +102,8 @@ async function main(): Promise<void> {
   if (values.preset !== undefined && !isStylePresetId(values.preset)) {
     throw new Error(`Unknown --preset "${values.preset}". Choose one of: ${STYLE_PRESET_IDS.join(", ")}.`);
   }
-  // Validate every enum-like flag before preflight or spend: a typo must fail fast, and an
-  // unknown value must never be silently dropped (renderAll ignores formats it doesn't know).
+  // Validate every enum-like flag before preflight or spend: a typo must fail fast, before
+  // preflight can prompt to install anything.
   const formats = values.formats === undefined ? undefined : parseOutputFormats(values.formats);
   const pdfLayout = values["pdf-layout"] === undefined ? undefined : parsePdfLayout(values["pdf-layout"]);
   const effort = values.effort === undefined ? undefined : parseEffort(values.effort);
