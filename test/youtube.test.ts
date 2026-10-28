@@ -165,6 +165,10 @@ test("maps yt-dlp failures to actionable hints", () => {
   assert.match(describeYtDlpFailure("ERROR: [youtube] abc: Private video. Sign in", 1), /public and unlisted/);
   assert.match(describeYtDlpFailure("ERROR: unable to download: HTTP Error 403: Forbidden", 1), /loomdoc doctor/);
   assert.match(describeYtDlpFailure("something odd", 2), /exit code 2\): something odd$/);
+  assert.equal(
+    describeYtDlpFailure("ERROR: [youtube] abc: Video unavailable. This video has been removed by the uploader", 1),
+    "yt-dlp failed (exit code 1): ERROR: [youtube] abc: Video unavailable. This video has been removed by the uploader",
+  );
 });
 
 test("a video YouTube will not serve is SOURCE_UNAVAILABLE; other yt-dlp failures are TOOL_FAILED", () => {

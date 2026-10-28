@@ -71,7 +71,7 @@ export function describeYtDlpFailure(stderr: string, code: number | null): strin
       " YouTube is asking this network to prove it is not a bot (common on cloud/VPN IPs). " +
       "Run from a normal home or office connection, or add `--cookies-from-browser <browser>` " +
       `to loomdoc's yt-dlp config file (${ytDlpConfigPath()}).`;
-  } else if (VIDEO_UNAVAILABLE.test(stderr)) {
+  } else if (/private video|members-only|join this channel/i.test(stderr)) {
     hint = " loomdoc supports public and unlisted YouTube videos only.";
   } else if (/HTTP Error 403|Requested format is not available|nsig|signature|no such option/i.test(stderr)) {
     hint =

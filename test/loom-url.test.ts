@@ -75,3 +75,11 @@ test("a Loom video with no transcript still rejects with NO_TRANSCRIPT", async (
   );
   await assert.rejects(fetchLoomVideo(`https://www.loom.com/share/${ID}`, "/nonexistent"), { name: "LoomdocError", code: "NO_TRANSCRIPT" });
 });
+
+test("a connection reset while reading Loom's reply rejects with NETWORK", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => {
+    const body = new ReadableStream({ start: (c) => c.error(new TypeError("terminated")) });
+    return new Response(body, { status: 200 });
+  });
+  await assert.rejects(fetchLoomVideo(`https://www.loom.com/share/${ID}`, "/nonexistent"), { name: "LoomdocError", code: "NETWORK" });
+});

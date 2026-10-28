@@ -104,7 +104,10 @@ async function graphql<T>(operationName: string, query: string, variables: unkno
   try {
     json = (await res.json()) as typeof json;
   } catch (err) {
-    throw new LoomdocError("SOURCE_UNAVAILABLE", `Loom GraphQL ${operationName} did not return JSON.`, { cause: err });
+    if (err instanceof SyntaxError) {
+      throw new LoomdocError("SOURCE_UNAVAILABLE", `Loom GraphQL ${operationName} did not return JSON.`, { cause: err });
+    }
+    throw new LoomdocError("NETWORK", `Network error reading Loom's reply (${operationName}): ${asMessage(err)}`, { cause: err });
   }
   if (json.errors?.length) {
     throw new LoomdocError("SOURCE_UNAVAILABLE", `Loom GraphQL ${operationName} error: ${json.errors[0]?.message ?? "unknown"}`);
