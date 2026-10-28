@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { pipeline } from "node:stream";
-import { stat } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { extname, isAbsolute, relative, resolve, sep } from "node:path";
@@ -389,9 +389,23 @@ export async function serveOutputFile(res: ServerResponse, outputDir: string, en
   const type = CONTENT_TYPES[extname(target).toLowerCase()];
   if (!type) return sendJson(res, 403, { error: "Refused." });
 
+  // stat() and the read follow symlinks, so check containment again on the real paths.
+  let realRoot: string;
+  let realTarget: string;
+  try {
+    realRoot = await realpath(root);
+    realTarget = await realpath(target);
+  } catch {
+    return sendJson(res, 404, { error: "Not found." });
+  }
+  const realRel = relative(realRoot, realTarget);
+  if (realRel === "" || realRel.startsWith("..") || isAbsolute(realRel)) {
+    return sendJson(res, 403, { error: "Refused." });
+  }
+
   let size: number;
   try {
-    const info = await stat(target);
+    const info = await stat(realTarget);
     if (!info.isFile()) return sendJson(res, 404, { error: "Not found." });
     size = info.size;
   } catch {
@@ -403,7 +417,7 @@ export async function serveOutputFile(res: ServerResponse, outputDir: string, en
   }
   res.writeHead(200, headers);
   // pipeline() destroys both streams on error; an unhandled stream error would crash the server.
-  pipeline(createReadStream(target), res, () => {});
+  pipeline(createReadStream(realTarget), res, () => {});
 }
 
 function setSecurityHeaders(res: ServerResponse): void {

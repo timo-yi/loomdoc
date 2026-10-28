@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { request } from "node:http";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startUiServer, type UiServer } from "../src/ui/server.js";
@@ -289,7 +289,7 @@ test("a failed requirements check releases the run slot", async () => {
   }
 });
 
-test("output files are served without the page CSP, and a read error doesn't crash the server", { skip: process.platform !== "linux" }, async () => {
+test("output files are served without the page CSP, and a read error doesn't crash the server", { skip: process.platform === "win32" || process.getuid?.() === 0 }, async () => {
   const s = await setup();
   try {
     const res = await postRun(s);
@@ -301,9 +301,9 @@ test("output files are served without the page CSP, and a read error doesn't cra
     assert.equal(md.headers["content-security-policy"], undefined);
     assert.equal(md.headers["x-content-type-options"], "nosniff");
 
-    // stat() reports a regular file but reading it fails (EIO).
-    const { symlink } = await import("node:fs/promises");
-    await symlink("/proc/self/mem", join(s.outputDir, "broken.md"));
+    // stat() reports a regular file but opening it fails (EACCES).
+    await writeFile(join(s.outputDir, "broken.md"), "x");
+    await chmod(join(s.outputDir, "broken.md"), 0o000);
     await send(s.server.port, `/files/${id}/broken.md`, { headers: { cookie: s.cookie } }).catch(() => undefined);
     const alive = await send(s.server.port, "/api/config", { headers: { cookie: s.cookie } });
     assert.equal(alive.status, 200, "server survived the stream error");
