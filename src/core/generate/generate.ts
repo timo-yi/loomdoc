@@ -5,7 +5,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import { loomDocSchema, type LoomDocOutput } from "./schema.js";
 import type { DocContext, Effort } from "../types.js";
-import { DEFAULT_PRESET, STYLE_PRESETS } from "./styles.js";
+import { DEFAULT_PRESET, STYLE_PRESETS, TECHNICAL_WRITING_RULES } from "./styles.js";
 import type { SourceVideo } from "../ingest/types.js";
 import type { CandidateFrame } from "../frames/winnow.js";
 import { LoomdocError } from "../util/errors.js";
@@ -126,6 +126,9 @@ export function buildSystemPrompt(context?: DocContext): string {
     ...preset.instructions,
     "",
   ];
+  if (preset.diataxis) {
+    lines.push("Writing standard for every sentence:", ...TECHNICAL_WRITING_RULES, "");
+  }
 
   const supplied = [
     ctx.role ? `Role: ${ctx.role}` : null,

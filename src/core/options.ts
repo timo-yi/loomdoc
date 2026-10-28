@@ -4,7 +4,7 @@ import { LoomdocError } from "./util/errors.js";
 /**
  * The one check for a list of output formats, shared by runLoomdoc (library wording) and the
  * CLI's --formats parser (flag wording): it must be a non-empty list of known formats (renderAll
- * silently skips a format it doesn't know, after the run has already spent), and
+ * runs after the model call, so an unknown format must fail before any spend), and
  * duplicates are dropped so the same file is never rendered twice. `label` names the input in
  * error messages ("formats" or "--formats").
  *

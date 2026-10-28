@@ -4,7 +4,7 @@ import { runLoomdoc } from "./index.js";
 import type { DocContext } from "./core/types.js";
 import { parseEffort, parseOutputFormats, parsePdfLayout } from "./cli-flags.js";
 import { detectSource } from "./core/ingest/index.js";
-import { isStylePresetId, STYLE_PRESET_IDS, STYLE_PRESETS } from "./core/generate/styles.js";
+import { isMissingGuidance, isStylePresetId, STYLE_PRESET_IDS } from "./core/generate/styles.js";
 import { blockingProblems, requirementsFor, type Requirement } from "./setup/checks.js";
 import { isInteractiveTerminal, runPreflight, terminalIO } from "./setup/preflight.js";
 import { startUiServer } from "./ui/server.js";
@@ -93,17 +93,23 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (values.preset === "training") {
+    throw new Error('--preset training was replaced by --preset tutorial (or explanation, for the "why").');
+  }
+  if (values.preset === "support-article") {
+    throw new Error("--preset support-article was folded into --preset how-to. Add --audience customers for a help-center article.");
+  }
   if (values.preset !== undefined && !isStylePresetId(values.preset)) {
     throw new Error(`Unknown --preset "${values.preset}". Choose one of: ${STYLE_PRESET_IDS.join(", ")}.`);
   }
-  // Validate every enum-like flag before preflight or spend: a typo must fail fast, and an
-  // unknown value must never be silently dropped (renderAll ignores formats it doesn't know).
+  // Validate every enum-like flag before preflight or spend: a typo must fail fast, before
+  // preflight can prompt to install anything.
   const formats = values.formats === undefined ? undefined : parseOutputFormats(values.formats);
   const pdfLayout = values["pdf-layout"] === undefined ? undefined : parsePdfLayout(values["pdf-layout"]);
   const effort = values.effort === undefined ? undefined : parseEffort(values.effort);
 
-  if (values.preset === "custom" && !values.guidance?.trim()) {
-    throw new Error('--preset custom needs --guidance describing the document you want.');
+  if (values.preset !== undefined && isMissingGuidance(values.preset, values.guidance)) {
+    throw new Error(`--preset ${values.preset} needs --guidance describing the document you want.`);
   }
 
   // Check only what this run needs, before any download or spend.
@@ -122,7 +128,7 @@ async function main(): Promise<void> {
     useCase: values["use-case"],
     intent: values.intent,
     style: values.style,
-    preset: values.preset as DocContext["preset"],
+    preset: values.preset,
     guidance: values.guidance,
   };
 

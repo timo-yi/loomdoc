@@ -6,7 +6,8 @@
     "lib": ["ES2022"],
     "types": ["node"],
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": ".",
+    "noEmit": true,
     "declaration": true,
     "sourceMap": true,
     "strict": true,
@@ -16,6 +17,6 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "test/**/*"],
   "exclude": ["node_modules", "dist"]
 }

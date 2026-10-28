@@ -204,8 +204,18 @@ test("validates input, refuses concurrent runs, and reports setup problems", asy
   };
   const s = await setup(slow);
   try {
+    const config = JSON.parse((await send(s.server.port, "/api/config", { headers: { cookie: s.cookie } })).body) as {
+      presets: { id: string; requiresGuidance: boolean }[];
+    };
+    assert.deepEqual(
+      config.presets.filter((p) => p.requiresGuidance).map((p) => p.id),
+      ["custom"],
+      "the page learns which presets need guidance from config",
+    );
     const custom = JSON.stringify({ url: "https://youtu.be/dQw4w9WgXcQ", preset: "custom", formats: ["pdf"] });
-    assert.equal((await postRun(s, custom)).status, 400);
+    const customReply = await postRun(s, custom);
+    assert.equal(customReply.status, 400);
+    assert.match(customReply.body, /The Custom style needs guidance/);
     assert.equal((await postRun(s, JSON.stringify({ url: "x", preset: "nope", formats: ["pdf"] }))).status, 400);
     assert.equal((await postRun(s, JSON.stringify({ url: "x", preset: "how-to", formats: [] }))).status, 400);
 

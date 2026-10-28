@@ -37,7 +37,7 @@ export function pageHtml(token: string): string {
 
     <fieldset class="field">
       <legend class="label">Document style</legend>
-      <div id="presets" class="presets" role="radiogroup"></div>
+      <div id="presets" role="radiogroup"></div>
     </fieldset>
 
     <section class="field">
@@ -218,7 +218,21 @@ input:focus, select:focus, textarea:focus, button:focus-visible, .preset:focus-w
 .preset input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .preset .name { display: block; font-weight: 600; }
 .preset .summary { display: block; color: var(--muted); font-size: 0.875rem; margin-top: 2px; }
+.preset .quadrant {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  vertical-align: 1px;
+}
+.preset .definition { display: block; color: var(--muted); font-size: 0.8125rem; margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border); }
 .preset.selected { border-color: var(--accent); background: var(--accent-soft); }
+.preset-group-title { font-size: 0.875rem; font-weight: 600; margin: 4px 0 8px; }
+.presets + .preset-group-title { margin-top: 16px; }
 .group { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
 .group summary { cursor: pointer; margin: 0; }
 .group[open] summary { margin-bottom: 12px; }
@@ -324,8 +338,35 @@ export const APP_JS = `
     return checked ? checked.value : "how-to";
   }
 
+  /** The preset with this id if it needs guidance, else null. */
+  function presetNeedingGuidance(id) {
+    var presets = config ? config.presets : [];
+    for (var i = 0; i < presets.length; i++) {
+      if (presets[i].id === id) return presets[i].requiresGuidance ? presets[i] : null;
+    }
+    return null;
+  }
+
   function renderPresets(presets, current) {
     presetsBox.textContent = "";
+    // A saved preference can name a preset that no longer exists (e.g. the old "training" or "support-article").
+    var known = presets.some(function (p) { return p.id === current; });
+    if (!known) current = "how-to";
+    var technical = presets.filter(function (p) { return p.diataxis; });
+    var other = presets.filter(function (p) { return !p.diataxis; });
+    if (technical.length > 0) {
+      var heading = el("p", "preset-group-title", "Technical writing");
+      heading.appendChild(el("span", "muted", " (Diátaxis: pick by whether the reader needs to do or to understand, while learning or while working)"));
+      presetsBox.appendChild(heading);
+      presetsBox.appendChild(presetGrid(technical, current));
+      presetsBox.appendChild(el("p", "preset-group-title", "Other styles"));
+    }
+    presetsBox.appendChild(presetGrid(other, current));
+    syncPresetUi();
+  }
+
+  function presetGrid(presets, current) {
+    var grid = el("div", "presets");
     presets.forEach(function (p) {
       var label = el("label", "preset");
       var input = document.createElement("input");
@@ -334,20 +375,23 @@ export const APP_JS = `
       input.value = p.id;
       input.checked = p.id === current;
       label.appendChild(input);
-      label.appendChild(el("span", "name", p.label));
+      var name = el("span", "name", p.label);
+      if (p.diataxis) name.appendChild(el("span", "quadrant", p.diataxis.quadrant));
+      label.appendChild(name);
       label.appendChild(el("span", "summary", p.summary));
-      presetsBox.appendChild(label);
+      if (p.diataxis) label.appendChild(el("span", "definition", p.diataxis.definition));
+      grid.appendChild(label);
     });
-    syncPresetUi();
+    return grid;
   }
 
   function syncPresetUi() {
     presetsBox.querySelectorAll(".preset").forEach(function (label) {
       label.classList.toggle("selected", label.querySelector("input").checked);
     });
-    var custom = selectedPreset() === "custom";
-    $("guidance-optional").textContent = custom ? "(required for Custom)" : "(optional)";
-    $("guidance-hint").textContent = custom
+    var required = presetNeedingGuidance(selectedPreset());
+    $("guidance-optional").textContent = required ? "(required for " + required.label + ")" : "(optional)";
+    $("guidance-hint").textContent = required
       ? "Describe the document you want: its purpose, who reads it, how it should be structured, and the tone."
       : "Anything the AI should know or do: who it is for, what to emphasize or skip, tone, terminology.";
   }
@@ -392,7 +436,8 @@ export const APP_JS = `
       return "That doesn't look like a link. Paste the full Loom or YouTube URL.";
     }
     if (body.formats.length === 0) return "Pick at least one output format.";
-    if (body.preset === "custom" && !body.guidance.trim()) return "The Custom style needs guidance describing the document you want.";
+    var required = presetNeedingGuidance(body.preset);
+    if (required && !body.guidance.trim()) return "The " + required.label + " style needs guidance describing the document you want.";
     return "";
   }
 

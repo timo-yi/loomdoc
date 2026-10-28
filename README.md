@@ -204,8 +204,8 @@ loomdoc <loom-or-youtube-url> [options]
   --effort <level>   low|medium|high|xhigh|max (default: medium)
 
 Document style:
-  --preset <id>      how-to | sales-walkthrough | training | support-article |
-                     release-notes | product-launch | custom (default: how-to)
+  --preset <id>      tutorial | how-to | reference | explanation | release-notes |
+                     sales-walkthrough | product-launch | custom (default: how-to)
   --guidance <text>  Free-text direction for the AI (what to emphasize, skip, tone...);
                      required with --preset custom
 
@@ -229,15 +229,22 @@ loomdoc doctor [--yes]   Check (and offer to install) everything loomdoc needs
 
 ### Document styles
 
-| Style (`--preset`) | What you get |
-|---|---|
-| How-to documentation (`how-to`, default) | Step-by-step instructions someone can follow |
-| Sales walkthrough (`sales-walkthrough`) | A guided product tour for a prospect or customer, focused on value; never invents pricing or metrics |
-| Training / onboarding (`training`) | Explains why as well as how, defines terms, ends with key takeaways |
-| Support article (`support-article`) | A customer-facing help-center article phrased around the reader's problem |
-| Release notes (`release-notes`) | One entry per change: what changed, who benefits, how to use it |
-| Product / feature launch (`product-launch`) | An announcement leading with the headline benefit |
-| Custom (`custom`) | Whatever you describe in `--guidance` |
+The first four styles are the Diátaxis technical-writing modes, adapted from the
+[technical-writing skill](https://github.com/cursor/plugins/blob/main/pstack/skills/technical-writing/SKILL.md).
+Two questions pick one: does the reader need to act or to understand, and are they learning or
+working? These four also follow the skill's sentence rules: short everyday words, one
+instruction per sentence, the condition before the instruction, real UI names, and no filler.
+
+| Style (`--preset`) | Diátaxis | What you get |
+|---|---|---|
+| Tutorial (`tutorial`) | Action + learning | Learning by doing: a guided lesson where every step shows a visible result |
+| How-to guide (`how-to`, default) | Action + work | Steps to a goal: instructions a competent reader follows to get a task done. Also covers help-center articles: set the audience to your customers |
+| Reference (`reference`) | Understanding + work | Facts for lookup: a dry, complete description of the screens, settings, and options shown |
+| Explanation (`explanation`) | Understanding + learning | Understanding and why: the context, design decisions, and trade-offs behind what the video shows |
+| Release notes (`release-notes`) | | One entry per change: what changed, who benefits, how to use it |
+| Sales walkthrough (`sales-walkthrough`) | | A guided product tour for a prospect or customer, focused on value; never invents pricing or metrics |
+| Product / feature launch (`product-launch`) | | An announcement leading with the headline benefit |
+| Custom (`custom`) | | Whatever you describe in `--guidance` |
 
 Every style produces the same kind of output (sections with screenshots), so Markdown, Word,
 and PDF all work with each. Guidance is applied on top of the style and wins where they
@@ -247,7 +254,7 @@ supply them in your guidance or the audience and context fields (for example, "o
 onboarding takes 2 weeks").
 
 With Option A, pass options after the `--`, e.g.
-`npm run dev -- <url> --preset training --guidance "Audience is new support hires" --formats markdown`.
+`npm run dev -- <url> --preset tutorial --guidance "Audience is new support hires" --formats markdown`.
 
 Typical cost is roughly **$0.10 to $0.20** per short video (Sonnet 5, medium effort).
 
@@ -279,6 +286,11 @@ Typical cost is roughly **$0.10 to $0.20** per short video (Sonnet 5, medium eff
 Deferred by design (see the PRD): Google Docs export, PowerPoint decks, batch input,
 workspace-private Loom auth, Sonnet to Opus auto-escalation, and packaging as a Vercel AI SDK
 tool or Claude Code plugin. The architecture keeps each of these low-friction to add.
+
+## Contributing
+
+To set up the repo, run the checks, or add a source, format, style, or option, read
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

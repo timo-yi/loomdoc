@@ -81,7 +81,7 @@ Sonnet→Opus escalation, Vercel AI SDK / Claude Code plugin packaging).
 ## Commands
 
 ```bash
-npm run typecheck   # tsc --noEmit
+npm run typecheck   # tsc over src/ and test/ (no emit)
 npm run dev -- <loom-url> [options]   # run from source via tsx
 npm run build       # emit dist/
 ```

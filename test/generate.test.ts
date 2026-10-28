@@ -87,8 +87,8 @@ test("buildUserContent lays out transcript then one image per candidate", async 
 
 test("buildSystemPrompt defaults to the how-to preset", () => {
   const prompt = buildSystemPrompt();
-  assert.match(prompt, /into a clear, step-by-step how-to document/);
-  assert.match(prompt, /Document type: How-to documentation/);
+  assert.match(prompt, /into a how-to guide that takes a competent reader/);
+  assert.match(prompt, /Document type: How-to guide/);
   assert.doesNotMatch(prompt, /<direction>/);
 });
 
@@ -99,6 +99,23 @@ test("buildSystemPrompt applies the preset and appends the user's guidance last"
   assert.match(prompt, /Audience: CFO/);
   assert.match(prompt, /<direction>\nEmphasize reporting\.\n<\/direction>$/);
   assert.match(prompt, /never overrides the rules at the top/i);
+});
+
+test("the four Diátaxis presets get the technical-writing rules and the others do not", async () => {
+  const { STYLE_PRESET_IDS, STYLE_PRESETS, DIATAXIS_MODES, TECHNICAL_WRITING_RULES } = await import("../src/core/generate/styles.js");
+  const technical = STYLE_PRESET_IDS.filter((id) => STYLE_PRESETS[id].diataxis);
+  assert.deepEqual([...technical].sort(), [...DIATAXIS_MODES].sort());
+  for (const id of STYLE_PRESET_IDS) {
+    const prompt = buildSystemPrompt({ preset: id, guidance: "Keep it short." });
+    const rules = prompt.indexOf("Writing standard for every sentence:");
+    if (STYLE_PRESETS[id].diataxis) {
+      assert.equal(STYLE_PRESETS[id].diataxis!.mode, id);
+      for (const rule of TECHNICAL_WRITING_RULES) assert.ok(prompt.includes(rule), `${id}: has rule ${rule}`);
+      assert.ok(rules >= 0 && rules < prompt.indexOf("<direction>"), `${id}: rules come before the user's direction`);
+    } else {
+      assert.equal(rules, -1, `${id}: no technical-writing rules`);
+    }
+  }
 });
 
 test("every preset produces a distinct prompt", async () => {
