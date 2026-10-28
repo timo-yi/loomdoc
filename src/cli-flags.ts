@@ -26,7 +26,7 @@ export function parseOutputFormats(value: string): OutputFormat[] {
 /** Parse a `--pdf-layout` value. Throws with the valid choices on bad input. */
 export function parsePdfLayout(value: string): PdfLayout {
   if (!isPdfLayout(value)) {
-    throw new LoomdocError(`Unknown --pdf-layout "${value}". Choose one of: ${PDF_LAYOUTS.join(", ")}.`);
+    throw new LoomdocError("INVALID_OPTIONS", `Unknown --pdf-layout "${value}". Choose one of: ${PDF_LAYOUTS.join(", ")}.`);
   }
   return value;
 }
@@ -34,7 +34,7 @@ export function parsePdfLayout(value: string): PdfLayout {
 /** Parse an `--effort` value. Throws with the valid choices on bad input. */
 export function parseEffort(value: string): Effort {
   if (!isEffort(value)) {
-    throw new LoomdocError(`Unknown --effort "${value}". Choose one of: ${EFFORT_LEVELS.join(", ")}.`);
+    throw new LoomdocError("INVALID_OPTIONS", `Unknown --effort "${value}". Choose one of: ${EFFORT_LEVELS.join(", ")}.`);
   }
   return value;
 }

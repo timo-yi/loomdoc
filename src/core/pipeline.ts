@@ -39,7 +39,7 @@ const IMAGES_DIR = "images";
  * the flow; the individual stages are implemented in their own modules.
  */
 export async function runLoomdoc(options: LoomdocOptions): Promise<LoomdocResult> {
-  if (!options.url) throw new LoomdocError("A Loom or YouTube video URL is required.");
+  if (!options.url) throw new LoomdocError("INVALID_OPTIONS", "A Loom or YouTube video URL is required.");
   validateOptions(options); // before any preflight, download, or spend
 
   const model = options.model ?? DEFAULT_MODEL;
@@ -84,7 +84,7 @@ export async function runLoomdoc(options: LoomdocOptions): Promise<LoomdocResult
     let frameRequests = 0;
     const requestFrame = async (timestampSeconds: number): Promise<string> => {
       if (frameRequests >= maxFrameRequests) {
-        throw new LoomdocError(`Exceeded maxFrameRequests (${maxFrameRequests}).`);
+        throw new LoomdocError("MODEL_INCOMPLETE", `Exceeded maxFrameRequests (${maxFrameRequests}).`);
       }
       frameRequests += 1;
       progress("generate", `The model asked for the frame at ${formatTs(timestampSeconds)}`);
@@ -180,17 +180,17 @@ async function materializeScreenshots(
  */
 function validateOptions(options: LoomdocOptions): void {
   if (options.pdfLayout !== undefined && !isPdfLayout(options.pdfLayout)) {
-    throw new LoomdocError(`Unknown PDF layout "${options.pdfLayout}". Choose one of: ${PDF_LAYOUTS.join(", ")}.`);
+    throw new LoomdocError("INVALID_OPTIONS", `Unknown PDF layout "${options.pdfLayout}". Choose one of: ${PDF_LAYOUTS.join(", ")}.`);
   }
   if (options.effort !== undefined && !isEffort(options.effort)) {
-    throw new LoomdocError(`Unknown effort "${options.effort}". Choose one of: ${EFFORT_LEVELS.join(", ")}.`);
+    throw new LoomdocError("INVALID_OPTIONS", `Unknown effort "${options.effort}". Choose one of: ${EFFORT_LEVELS.join(", ")}.`);
   }
   const preset = options.context?.preset;
   if (preset === undefined) return;
   if (!isStylePresetId(preset)) {
-    throw new LoomdocError(`Unknown preset "${preset}". Choose one of: ${STYLE_PRESET_IDS.join(", ")}.`);
+    throw new LoomdocError("INVALID_OPTIONS", `Unknown preset "${preset}". Choose one of: ${STYLE_PRESET_IDS.join(", ")}.`);
   }
   if (isMissingGuidance(preset, options.context?.guidance)) {
-    throw new LoomdocError(`The ${STYLE_PRESETS[preset].label} style needs guidance describing the document you want.`);
+    throw new LoomdocError("INVALID_OPTIONS", `The ${STYLE_PRESETS[preset].label} style needs guidance describing the document you want.`);
   }
 }

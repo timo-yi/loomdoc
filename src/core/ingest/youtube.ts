@@ -49,6 +49,7 @@ export function parseYouTubeUrl(url: string): string {
 
   if (id && ID_RE.test(id)) return id;
   throw new LoomdocError(
+    "UNSUPPORTED_URL",
     `Could not find a YouTube video id in "${url}". Expected a link like ` +
       `https://www.youtube.com/watch?v=<id> or https://youtu.be/<id>.`,
   );
@@ -121,12 +122,13 @@ export async function fetchYouTubeVideo(url: string, scratchDir: string): Promis
 
   const meta = await fetchMetadata(watchUrl);
   if (meta.live_status === "is_live" || meta.live_status === "is_upcoming") {
-    throw new LoomdocError("This YouTube video is a live or upcoming stream. Try again once it has ended.");
+    throw new LoomdocError("SOURCE_UNAVAILABLE", "This YouTube video is a live or upcoming stream. Try again once it has ended.");
   }
 
   const caption = chooseCaptionTrack(meta);
   if (!caption) {
     throw new LoomdocError(
+      "NO_TRANSCRIPT",
       "No usable captions are available for this YouTube video (neither uploaded nor automatic). " +
         "loomdoc needs the transcript to work.",
     );
@@ -158,7 +160,7 @@ export async function fetchYouTubeVideo(url: string, scratchDir: string): Promis
   ]);
 
   const videoPath = stdout.trim().split("\n").pop()?.trim();
-  if (!videoPath) throw new LoomdocError("yt-dlp did not report where it saved the video.");
+  if (!videoPath) throw new LoomdocError("TOOL_FAILED", "yt-dlp did not report where it saved the video.");
   await assertNonEmptyFile(videoPath, "YouTube video download");
 
   const transcript = await readCaptions(scratchDir);
@@ -173,16 +175,16 @@ async function fetchMetadata(watchUrl: string): Promise<YouTubeMetadata> {
   const stdout = await runYtDlp(["-J", "--no-playlist", "--no-warnings", "--skip-download", watchUrl]);
   try {
     return JSON.parse(stdout) as YouTubeMetadata;
-  } catch {
-    throw new LoomdocError("yt-dlp returned metadata loomdoc could not parse.");
+  } catch (err) {
+    throw new LoomdocError("TOOL_FAILED", "yt-dlp returned metadata loomdoc could not parse.", { cause: err });
   }
 }
 
 async function readCaptions(scratchDir: string): Promise<TranscriptCue[]> {
   const file = (await readdir(scratchDir)).find((n) => n.startsWith("captions.") && n.endsWith(".json3"));
-  if (!file) throw new LoomdocError("yt-dlp did not download the YouTube captions.");
+  if (!file) throw new LoomdocError("TOOL_FAILED", "yt-dlp did not download the YouTube captions.");
   const cues = parseYouTubeJson3(await readFile(join(scratchDir, file), "utf8"));
-  if (cues.length === 0) throw new LoomdocError("The YouTube captions were empty or unparseable.");
+  if (cues.length === 0) throw new LoomdocError("NO_TRANSCRIPT", "The YouTube captions were empty or unparseable.");
   return cues;
 }
 

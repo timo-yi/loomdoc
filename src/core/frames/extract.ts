@@ -44,6 +44,7 @@ export async function extractFrameAt(
   }
   if (size === 0) {
     throw new LoomdocError(
+      "TOOL_FAILED",
       `ffmpeg produced no frame at ${ss}s (likely past the end of the video).`,
     );
   }

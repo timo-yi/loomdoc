@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseLoomUrl } from "../src/core/ingest/loom.js";
+import { fetchLoomVideo, parseLoomUrl } from "../src/core/ingest/loom.js";
 
 const ID = "abcdef0123456789abcdef0123456789"; // exactly 32 hex
 
@@ -50,4 +50,36 @@ test("does not over-capture an id followed by more hex", () => {
 
 test("returns exactly 32 chars for a valid link", () => {
   assert.equal(parseLoomUrl(`https://www.loom.com/share/${ID}`).length, 32);
+});
+
+test("a Loom reply that is not JSON rejects with SOURCE_UNAVAILABLE, not a SyntaxError", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => new Response("<html>blocked</html>", { status: 200 }));
+  await assert.rejects(fetchLoomVideo(`https://www.loom.com/share/${ID}`, "/nonexistent"), (err: Error & { code?: string }) => {
+    assert.equal(err.name, "LoomdocError");
+    assert.equal(err.code, "SOURCE_UNAVAILABLE");
+    assert.ok(err.cause instanceof SyntaxError);
+    return true;
+  });
+});
+
+test("a Loom video that does not exist rejects with SOURCE_UNAVAILABLE, not NO_TRANSCRIPT", async (t) => {
+  t.mock.method(globalThis, "fetch", async () =>
+    Response.json({ data: { getVideo: null, fetchVideoTranscript: { __typename: "InvalidRequestWarning" } } }),
+  );
+  await assert.rejects(fetchLoomVideo(`https://www.loom.com/share/${ID}`, "/nonexistent"), { name: "LoomdocError", code: "SOURCE_UNAVAILABLE" });
+});
+
+test("a Loom video with no transcript still rejects with NO_TRANSCRIPT", async (t) => {
+  t.mock.method(globalThis, "fetch", async () =>
+    Response.json({ data: { getVideo: null, fetchVideoTranscript: { __typename: "VideoTranscriptDetails", captions_source_url: null, source_url: null } } }),
+  );
+  await assert.rejects(fetchLoomVideo(`https://www.loom.com/share/${ID}`, "/nonexistent"), { name: "LoomdocError", code: "NO_TRANSCRIPT" });
+});
+
+test("a connection reset while reading Loom's reply rejects with NETWORK", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => {
+    const body = new ReadableStream({ start: (c) => c.error(new TypeError("terminated")) });
+    return new Response(body, { status: 200 });
+  });
+  await assert.rejects(fetchLoomVideo(`https://www.loom.com/share/${ID}`, "/nonexistent"), { name: "LoomdocError", code: "NETWORK" });
 });

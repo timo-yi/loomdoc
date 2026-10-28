@@ -38,7 +38,7 @@ export async function runFfmpeg(args: string[]): Promise<void> {
     isActivity: createProgressLiveness(),
   });
   if (result.code !== 0) {
-    throw new LoomdocError(`ffmpeg exited with code ${result.code}:\nstderr:\n${outputTail(result.stderr)}`);
+    throw new LoomdocError("TOOL_FAILED", `ffmpeg exited with code ${result.code}:\nstderr:\n${outputTail(result.stderr)}`);
   }
 }
 
@@ -85,11 +85,15 @@ export function createProgressLiveness(): (chunk: Buffer, stream: "stdout" | "st
 export function assertFfmpegAvailable(): Promise<void> {
   return new Promise((resolve, reject) => {
     const proc = spawn("ffmpeg", ["-version"], { stdio: "ignore" });
-    proc.on("error", () =>
-      reject(new LoomdocError("ffmpeg not found on PATH. Install ffmpeg (or run `loomdoc doctor`) to run loomdoc.")),
+    proc.on("error", (err) =>
+      reject(
+        new LoomdocError("TOOL_MISSING", "ffmpeg not found on PATH. Install ffmpeg (or run `loomdoc doctor`) to run loomdoc.", {
+          cause: err,
+        }),
+      ),
     );
     proc.on("close", (code) =>
-      code === 0 ? resolve() : reject(new LoomdocError("ffmpeg -version failed.")),
+      code === 0 ? resolve() : reject(new LoomdocError("TOOL_FAILED", "ffmpeg -version failed.")),
     );
   });
 }

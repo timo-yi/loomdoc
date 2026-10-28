@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { LoomdocError } from "./errors.js";
+import { LoomdocError, type LoomdocErrorCode } from "./errors.js";
 import { installedManagedTool, toolCommand } from "./tools.js";
 import { runTool } from "./run-tool.js";
 import { ytDlpConfigPath } from "./paths.js";
@@ -29,7 +29,9 @@ export async function runYtDlp(args: string[]): Promise<string> {
     maxStdoutBytes: Infinity,
     launchHint: "loomdoc needs it for YouTube videos; run `loomdoc doctor` to install it.",
   });
-  if (result.code !== 0) throw new LoomdocError(describeYtDlpFailure(result.stderr, result.code));
+  if (result.code !== 0) {
+    throw new LoomdocError(ytDlpFailureCode(result.stderr), describeYtDlpFailure(result.stderr, result.code));
+  }
   return result.stdout;
 }
 
@@ -45,6 +47,13 @@ export function configArgs(configPath: string = ytDlpConfigPath()): string[] {
   // Even loomdoc's own config must not make yt-dlp skip a video it has "already downloaded".
   args.push("--no-download-archive");
   return args;
+}
+
+const VIDEO_UNAVAILABLE = /private video|members-only|join this channel|video (is )?unavailable/i;
+
+/** A video YouTube will not serve is the source's problem; anything else is yt-dlp's. */
+export function ytDlpFailureCode(stderr: string): LoomdocErrorCode {
+  return VIDEO_UNAVAILABLE.test(stderr) ? "SOURCE_UNAVAILABLE" : "TOOL_FAILED";
 }
 
 /** Turn yt-dlp's stderr into a message that says what went wrong and what to do about it. */

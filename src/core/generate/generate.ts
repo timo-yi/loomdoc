@@ -93,9 +93,11 @@ export async function generateDoc(input: GenerateInput): Promise<GenerateResult>
     doc = result.output;
   } catch (err) {
     throw new LoomdocError(
+      "MODEL_INCOMPLETE",
       "The model did not return a complete document (it may have hit the step or output-token " +
-        "limit, or produced invalid output). Try re-running, or raise --effort. " +
+        "limit, or produced invalid output). Try re-running, or raise the effort option. " +
         `(${err instanceof Error ? err.message : String(err)})`,
+      { cause: err },
     );
   }
 

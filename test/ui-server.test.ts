@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startUiServer, type UiServer } from "../src/ui/server.js";
 import type { LoomdocOptions, LoomdocResult } from "../src/core/types.js";
+import { LoomdocError } from "../src/core/util/errors.js";
 
 interface Reply {
   status: number;
@@ -293,6 +294,33 @@ test("a failed requirements check releases the run slot", async () => {
   try {
     assert.equal((await postRun(s)).status, 412);
     assert.equal((await postRun(s)).status, 412, "not 409: the slot was released");
+  } finally {
+    await s.server.close();
+    await rm(s.dir, { recursive: true, force: true });
+  }
+});
+
+test("a request body over the size limit gets 413, not 500", async () => {
+  const s = await setup();
+  try {
+    const res = await postRun(s, JSON.stringify({ url: "x".repeat(64 * 1024) }));
+    assert.equal(res.status, 413);
+    assert.deepEqual(JSON.parse(res.body), { error: "Request body too large." });
+    assert.equal(s.calls.length, 0);
+  } finally {
+    await s.server.close();
+    await rm(s.dir, { recursive: true, force: true });
+  }
+});
+
+test("a failed run's error event carries the LoomdocError code", async () => {
+  const s = await setup(async () => {
+    throw new LoomdocError("NO_TRANSCRIPT", "No transcript is available.");
+  });
+  try {
+    const { id } = JSON.parse((await postRun(s)).body) as { id: string };
+    const last = (await waitForEvents(s, id)).at(-1);
+    assert.deepEqual({ ...last, at: 0 }, { type: "error", message: "No transcript is available.", code: "NO_TRANSCRIPT", at: 0 });
   } finally {
     await s.server.close();
     await rm(s.dir, { recursive: true, force: true });
