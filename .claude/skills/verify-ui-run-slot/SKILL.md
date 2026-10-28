@@ -17,7 +17,7 @@ description: Model-check the single run slot of `loomdoc ui` (src/ui/server.ts) 
   - the `activeRunId` / `slotTaken` declarations
   - the `POST /api/runs` branch of `handle()`, from `await readJson(req)` through `sendJson(res, 202, …)`
   - `execute()`, its `try` / `catch` / `finally`
-- **Sync commit:** `8945d55` — the commit at which the model was last confirmed to describe the covered code. At that commit, the working tree had one uncommitted change in `server.ts`: `diataxis` was added to the `/api/config` preset list. That change is outside the covered code.
+- **Sync commit:** `34dbfc1` — the commit at which the model was last confirmed to describe the covered code. It was moved from `8945d55` after #11, which changed only `serveOutputFile` and an import, outside the covered code. The model was not edited.
 
 | Model action (`model/RunSlot.tla`) | Code it mirrors in `startUiServer` |
 | --- | --- |
@@ -37,7 +37,7 @@ description: Model-check the single run slot of `loomdoc ui` (src/ui/server.ts) 
 
 ## Does my change touch this?
 
-Run `git diff 8945d55 -- src/ui/server.ts`, also `git diff -- src/ui/server.ts` for uncommitted work, and read the hunks. The change touches the verification if it:
+Run `git diff 34dbfc1 -- src/ui/server.ts`, also `git diff -- src/ui/server.ts` for uncommitted work, and read the hunks. The change touches the verification if it:
 
 - adds, removes, or moves an `await` in the `POST /api/runs` branch or in `execute()`
 - reads or writes `slotTaken` or `activeRunId` anywhere
