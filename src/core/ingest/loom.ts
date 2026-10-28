@@ -100,7 +100,12 @@ async function graphql<T>(operationName: string, query: string, variables: unkno
     throw new LoomdocError("NETWORK", `Loom GraphQL ${operationName} failed with HTTP ${res.status}.`);
   }
 
-  const json = (await res.json()) as { data?: T; errors?: Array<{ message?: string }> };
+  let json: { data?: T; errors?: Array<{ message?: string }> };
+  try {
+    json = (await res.json()) as typeof json;
+  } catch (err) {
+    throw new LoomdocError("SOURCE_UNAVAILABLE", `Loom GraphQL ${operationName} did not return JSON.`, { cause: err });
+  }
   if (json.errors?.length) {
     throw new LoomdocError("SOURCE_UNAVAILABLE", `Loom GraphQL ${operationName} error: ${json.errors[0]?.message ?? "unknown"}`);
   }

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseLoomUrl } from "../src/core/ingest/loom.js";
+import { fetchLoomVideo, parseLoomUrl } from "../src/core/ingest/loom.js";
 
 const ID = "abcdef0123456789abcdef0123456789"; // exactly 32 hex
 
@@ -50,4 +50,14 @@ test("does not over-capture an id followed by more hex", () => {
 
 test("returns exactly 32 chars for a valid link", () => {
   assert.equal(parseLoomUrl(`https://www.loom.com/share/${ID}`).length, 32);
+});
+
+test("a Loom reply that is not JSON rejects with SOURCE_UNAVAILABLE, not a SyntaxError", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => new Response("<html>blocked</html>", { status: 200 }));
+  await assert.rejects(fetchLoomVideo(`https://www.loom.com/share/${ID}`, "/nonexistent"), (err: Error & { code?: string }) => {
+    assert.equal(err.name, "LoomdocError");
+    assert.equal(err.code, "SOURCE_UNAVAILABLE");
+    assert.ok(err.cause instanceof SyntaxError);
+    return true;
+  });
 });
