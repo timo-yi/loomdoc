@@ -683,12 +683,17 @@ export const APP_JS = `
     return r.json();
   }).then(function (cfg) {
     config = cfg;
+    showError("");
     var prefs = loadPrefs();
     // Render the option controls before restoring preferences into them.
     renderOptions(cfg.options);
     renderPresets(cfg.presets, prefs.preset || cfg.defaults.preset);
-    var formats = prefs.formats || cfg.defaults.formats;
-    form.querySelectorAll('input[name="formats"]').forEach(function (c) { c.checked = formats.indexOf(c.value) !== -1; });
+    var boxes = form.querySelectorAll('input[name="formats"]');
+    // Saved formats the server no longer offers would leave nothing checked; use the defaults instead.
+    var formats = Array.isArray(prefs.formats) ? prefs.formats : [];
+    var known = Array.prototype.some.call(boxes, function (c) { return formats.indexOf(c.value) !== -1; });
+    if (!known) formats = cfg.defaults.formats;
+    boxes.forEach(function (c) { c.checked = formats.indexOf(c.value) !== -1; });
     form.elements.model.value = prefs.model || cfg.defaults.model;
     restoreSelect(form.elements.effort, prefs.effort, cfg.defaults.effort);
     restoreSelect(form.elements.pdfLayout, prefs.pdfLayout, cfg.defaults.pdfLayout);
