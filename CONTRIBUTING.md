@@ -39,13 +39,13 @@ The rest of `src/`:
 - **Validate in the core, not only at the edges.** `runLoomdoc` is public API, so it checks its own options before any download or model call. The CLI and the UI also check their input first, with their own wording. Library error messages never name a CLI flag such as `--effort`.
 - **Key extension tables by their union type.** Sources (`SOURCES` in `src/core/ingest/index.ts`), renderers (`RENDERERS` in `src/core/render/index.ts`), and presets (`STYLE_PRESETS`) are `Record` tables. Then the compiler rejects a new union member that has no entry. Do not replace one with a `switch` or an `if` chain.
 - **Start child processes through the wrappers.** Use `runFfmpeg`, `runYtDlp`, or `runTool`. They track the process so a Ctrl-C stops it, and they bound its output. A process that you `spawn` directly is not stopped when the run is cancelled.
-- **Throw `LoomdocError` for problems a user can fix**, with a message that says what to do next.
+- **Throw `LoomdocError` for problems a user can fix**, with a code from `LOOMDOC_ERROR_CODES` in `src/core/util/errors.ts` and a message that says what to do next. Library callers branch on the code, so pick the closest one, or add a code if none fits. When you wrap a caught error, pass it as `cause`.
 - **Do not add an `await` to the UI's run-slot path** between the `slotTaken` check and `slotTaken = true` in the `POST /api/runs` handler. That gap lets two paid runs start at once. If you change that handler, run the `verify-ui-run-slot` check described in `.claude/skills/verify-ui-run-slot/SKILL.md`.
 - **Treat the client JavaScript in `src/ui/page.ts` as plain ES5 inside a template string.** The compiler does not check it. Write every regex backslash twice (`\\/`), and never write `${` in it. The page gets server data only from `/api/config`.
 
 ## Add a video source
 
-1. Create `src/core/ingest/<source>.ts` with a fetch function that returns a `SourceVideo`. Download the video track into the `scratchDir` you are given, and throw a `LoomdocError` if the video has no transcript. Use `loom.ts` and `youtube.ts` as models.
+1. Create `src/core/ingest/<source>.ts` with a fetch function that returns a `SourceVideo`. Download the video track into the `scratchDir` you are given, and throw `LoomdocError("NO_TRANSCRIPT", ...)` if the video has no transcript. Use `loom.ts` and `youtube.ts` as models.
 2. Add the source's name to `VideoSource` in `src/core/ingest/types.ts`. `VideoSource` is public API.
 3. Add an entry to `SOURCES` in `src/core/ingest/index.ts` with a `matches` function and the fetch function. `npm run typecheck` fails until you do. Update the "Unsupported video URL" message in the same file.
 4. If the source needs an external tool, add it to `requirementsFor` in `src/setup/checks.ts`. Today that function only knows `{ youtube: boolean }`, and `src/cli.ts` checks `detectSource(url) === "youtube"` in several places, so a new tool means changing both.
