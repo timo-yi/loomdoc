@@ -20,6 +20,7 @@ import {
   type LoomdocResult,
   type ProgressStage,
 } from "../core/types.js";
+import { LoomdocError, type LoomdocErrorCode } from "../core/util/errors.js";
 import { APP_CSS, APP_JS, FAVICON_SVG, pageHtml, unauthorizedHtml } from "./page.js";
 import { revealInFileManager } from "./open.js";
 
@@ -84,7 +85,7 @@ export type RunRequest = z.infer<typeof runRequestSchema>;
 type RunEvent =
   | { type: "progress"; stage: ProgressStage; message: string; at: number }
   | { type: "done"; result: RunResultView; at: number }
-  | { type: "error"; message: string; at: number };
+  | { type: "error"; message: string; code?: LoomdocErrorCode; at: number };
 
 interface RunResultView {
   title: string;
@@ -127,7 +128,8 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
 
   const server: Server = createServer((req, res) => {
     handle(req, res).catch((err: unknown) => {
-      if (!res.headersSent) sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      const status = err instanceof LoomdocError && err.code === "REQUEST_TOO_LARGE" ? 413 : 500;
+      if (!res.headersSent) sendJson(res, status, { error: err instanceof Error ? err.message : String(err) });
       else res.end();
     });
   });
@@ -302,7 +304,12 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       emit({ type: "done", result: toView(record.id, result), at: Date.now() });
     } catch (err) {
       record.status = "error";
-      emit({ type: "error", message: err instanceof Error ? err.message : String(err), at: Date.now() });
+      emit({
+        type: "error",
+        message: err instanceof Error ? err.message : String(err),
+        code: err instanceof LoomdocError ? err.code : undefined,
+        at: Date.now(),
+      });
     } finally {
       activeRunId = null;
       slotTaken = false;
@@ -461,7 +468,7 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
   let total = 0;
   for await (const chunk of req) {
     total += (chunk as Buffer).length;
-    if (total > MAX_BODY_BYTES) throw new Error("Request body too large.");
+    if (total > MAX_BODY_BYTES) throw new LoomdocError("REQUEST_TOO_LARGE", "Request body too large.");
     chunks.push(chunk as Buffer);
   }
   try {

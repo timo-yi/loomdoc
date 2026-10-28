@@ -57,7 +57,11 @@ test("detectSource routes Loom and YouTube, and rejects anything else", () => {
   assert.equal(detectSource(`https://youtu.be/${ID}`), "youtube");
   assert.equal(detectSource("https://www.loom.com/share/abcdef0123456789abcdef0123456789"), "loom");
   assert.equal(detectSource("abcdef0123456789abcdef0123456789"), "loom");
-  assert.throws(() => detectSource("https://vimeo.com/12345"), /Unsupported video URL/);
+  assert.throws(() => detectSource("https://vimeo.com/12345"), {
+    name: "LoomdocError",
+    code: "UNSUPPORTED_URL",
+    message: /Unsupported video URL/,
+  });
 });
 
 // --- caption selection -------------------------------------------------------------------

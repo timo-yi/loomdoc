@@ -15,16 +15,16 @@ export function checkOutputFormats(formats: unknown, label: string): OutputForma
   const choices = OUTPUT_FORMATS.join(", ");
   // A JavaScript caller can pass anything; "pdf" instead of ["pdf"] must not surface as a TypeError.
   if (!Array.isArray(formats)) {
-    throw new LoomdocError(`${label} must be a list of: ${choices}.`);
+    throw new LoomdocError("INVALID_OPTIONS", `${label} must be a list of: ${choices}.`);
   }
   if (formats.length === 0) {
-    throw new LoomdocError(`${label} needs at least one of: ${choices}.`);
+    throw new LoomdocError("INVALID_OPTIONS", `${label} needs at least one of: ${choices}.`);
   }
   const unknown = [
     ...new Set(formats.filter((f) => typeof f !== "string" || !isOutputFormat(f)).map(String)),
   ];
   if (unknown.length > 0) {
-    throw new LoomdocError(`Unknown ${label} "${unknown.join(", ")}". Choose from: ${choices}.`);
+    throw new LoomdocError("INVALID_OPTIONS", `Unknown ${label} "${unknown.join(", ")}". Choose from: ${choices}.`);
   }
   return [...new Set(formats as OutputFormat[])];
 }

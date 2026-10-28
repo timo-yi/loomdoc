@@ -36,6 +36,7 @@ export function detectSource(url: string): VideoSource {
     if (adapter.matches(url)) return source;
   }
   throw new LoomdocError(
+    "UNSUPPORTED_URL",
     `Unsupported video URL "${url}". loomdoc accepts Loom share links ` +
       `(https://www.loom.com/share/<id>) and YouTube links (https://www.youtube.com/watch?v=<id>).`,
   );

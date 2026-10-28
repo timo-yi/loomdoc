@@ -118,7 +118,11 @@ export function runTool(command: string, args: string[], options: RunToolOptions
     proc.on("error", (err) => {
       const hint = options.launchHint ? ` ${options.launchHint}` : "";
       finish(() =>
-        reject(new LoomdocError(`Failed to launch ${command}. Is it installed and on PATH?${hint} (${err.message})`)),
+        reject(
+          new LoomdocError("TOOL_MISSING", `Failed to launch ${command}. Is it installed and on PATH?${hint} (${err.message})`, {
+            cause: err,
+          }),
+        ),
       );
     });
     proc.on("close", (code) => {
@@ -126,6 +130,7 @@ export function runTool(command: string, args: string[], options: RunToolOptions
         finish(() =>
           reject(
             new LoomdocError(
+              "TOOL_STALLED",
               `${command} made no progress for ${formatDuration(idleTimeoutMs)} and was killed ` +
                 `(stalled input or corrupt file?).${tailSuffix(stderr, "Last output")}`,
             ),

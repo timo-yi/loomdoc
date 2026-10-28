@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
-import { runLoomdoc } from "./index.js";
+import { LoomdocError, runLoomdoc } from "./index.js";
 import type { DocContext } from "./core/types.js";
 import { parseEffort, parseOutputFormats, parsePdfLayout } from "./cli-flags.js";
 import { detectSource } from "./core/ingest/index.js";
@@ -94,13 +94,13 @@ async function main(): Promise<void> {
   }
 
   if (values.preset === "training") {
-    throw new Error('--preset training was replaced by --preset tutorial (or explanation, for the "why").');
+    throw new LoomdocError("INVALID_OPTIONS", '--preset training was replaced by --preset tutorial (or explanation, for the "why").');
   }
   if (values.preset === "support-article") {
-    throw new Error("--preset support-article was folded into --preset how-to. Add --audience customers for a help-center article.");
+    throw new LoomdocError("INVALID_OPTIONS", "--preset support-article was folded into --preset how-to. Add --audience customers for a help-center article.");
   }
   if (values.preset !== undefined && !isStylePresetId(values.preset)) {
-    throw new Error(`Unknown --preset "${values.preset}". Choose one of: ${STYLE_PRESET_IDS.join(", ")}.`);
+    throw new LoomdocError("INVALID_OPTIONS", `Unknown --preset "${values.preset}". Choose one of: ${STYLE_PRESET_IDS.join(", ")}.`);
   }
   // Validate every enum-like flag before preflight or spend: a typo must fail fast, before
   // preflight can prompt to install anything.
@@ -109,7 +109,7 @@ async function main(): Promise<void> {
   const effort = values.effort === undefined ? undefined : parseEffort(values.effort);
 
   if (values.preset !== undefined && isMissingGuidance(values.preset, values.guidance)) {
-    throw new Error(`--preset ${values.preset} needs --guidance describing the document you want.`);
+    throw new LoomdocError("INVALID_OPTIONS", `--preset ${values.preset} needs --guidance describing the document you want.`);
   }
 
   // Check only what this run needs, before any download or spend.
@@ -163,7 +163,9 @@ interface UiLaunch {
  */
 async function startUi(launch: UiLaunch): Promise<void> {
   const port = launch.port === undefined ? 0 : Number(launch.port);
-  if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error(`Invalid --port "${launch.port}".`);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    throw new LoomdocError("INVALID_OPTIONS", `Invalid --port "${launch.port}".`);
+  }
 
   const io = terminalIO();
   const opts = { interactive: launch.interactive, assumeYes: launch.assumeYes, verbose: false };

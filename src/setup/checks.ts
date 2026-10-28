@@ -1,3 +1,4 @@
+import { LoomdocError } from "../core/util/errors.js";
 import { installedManagedTool, toolCommand, type ManagedTool } from "../core/util/tools.js";
 import { capture, commandExists, hostInfo, runInteractive, type HostInfo } from "./platform.js";
 import { FFMPEG_MANUAL, ffmpegInstallPlan, installManaged, denoAsset, ytDlpAsset } from "./install.js";
@@ -80,7 +81,7 @@ export function ffmpegRequirement(host: HostInfo): Requirement {
                       log(`${shown} exited with code ${code}; continuing with the install.`);
                       continue;
                     }
-                    throw new Error(`${shown} exited with code ${code}`);
+                    throw new LoomdocError("SETUP_FAILED", `${shown} exited with code ${code}`);
                   }
                 },
                 afterFixHint:

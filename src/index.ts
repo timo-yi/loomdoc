@@ -8,3 +8,4 @@ export { runLoomdoc } from "./core/pipeline.js";
 export * from "./core/types.js";
 export { detectSource, type SourceVideo, type TranscriptCue, type VideoSource } from "./core/ingest/index.js";
 export { loomDocSchema, type LoomDocOutput } from "./core/generate/schema.js";
+export { LoomdocError, LOOMDOC_ERROR_CODES, type LoomdocErrorCode } from "./core/util/errors.js";

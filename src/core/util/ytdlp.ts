@@ -29,7 +29,7 @@ export async function runYtDlp(args: string[]): Promise<string> {
     maxStdoutBytes: Infinity,
     launchHint: "loomdoc needs it for YouTube videos; run `loomdoc doctor` to install it.",
   });
-  if (result.code !== 0) throw new LoomdocError(describeYtDlpFailure(result.stderr, result.code));
+  if (result.code !== 0) throw new LoomdocError("TOOL_FAILED", describeYtDlpFailure(result.stderr, result.code));
   return result.stdout;
 }
 

@@ -42,5 +42,5 @@ export async function assertNonEmptyFile(path: string, what: string): Promise<vo
   } catch {
     size = 0;
   }
-  if (size === 0) throw new LoomdocError(`The ${what} produced no data.`);
+  if (size === 0) throw new LoomdocError("TOOL_FAILED", `The ${what} produced no data.`);
 }

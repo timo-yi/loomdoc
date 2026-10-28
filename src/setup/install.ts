@@ -159,13 +159,13 @@ export function sha256(data: Uint8Array): string {
 
 export async function installManagedYtDlp(host: HostInfo, log: (line: string) => void): Promise<string> {
   const asset = ytDlpAsset(host);
-  if (!asset) throw new LoomdocError(`yt-dlp has no standalone build for ${host.platform}/${host.arch}.`);
+  if (!asset) throw new LoomdocError("SETUP_FAILED", `yt-dlp has no standalone build for ${host.platform}/${host.arch}.`);
   const tag = await latestTag("yt-dlp/yt-dlp");
   const base = `https://github.com/yt-dlp/yt-dlp/releases/download/${tag}`;
 
   log(`Downloading yt-dlp ${tag} from GitHub…`);
   const expected = checksumFor(await fetchText(`${base}/SHA2-256SUMS`), asset);
-  if (!expected) throw new LoomdocError(`yt-dlp ${tag} does not list a checksum for ${asset}.`);
+  if (!expected) throw new LoomdocError("SETUP_FAILED", `yt-dlp ${tag} does not list a checksum for ${asset}.`);
   const data = await fetchBytes(`${base}/${asset}`);
   verifyChecksum(data, expected, asset);
 
@@ -177,19 +177,19 @@ export async function installManagedYtDlp(host: HostInfo, log: (line: string) =>
 
 export async function installManagedDeno(host: HostInfo, log: (line: string) => void): Promise<string> {
   const asset = denoAsset(host);
-  if (!asset) throw new LoomdocError(`Deno has no prebuilt release for ${host.platform}/${host.arch}${host.musl ? " (musl)" : ""}.`);
+  if (!asset) throw new LoomdocError("SETUP_FAILED", `Deno has no prebuilt release for ${host.platform}/${host.arch}${host.musl ? " (musl)" : ""}.`);
   const tag = await latestTag("denoland/deno");
   const base = `https://github.com/denoland/deno/releases/download/${tag}`;
 
   log(`Downloading Deno ${tag} from GitHub…`);
   const expected = checksumFor(await fetchText(`${base}/${asset}.sha256sum`), asset);
-  if (!expected) throw new LoomdocError(`Deno ${tag} does not publish a readable checksum for ${asset}.`);
+  if (!expected) throw new LoomdocError("SETUP_FAILED", `Deno ${tag} does not publish a readable checksum for ${asset}.`);
   const zip = await fetchBytes(`${base}/${asset}`);
   verifyChecksum(zip, expected, asset);
 
   const exe = host.platform === "win32" ? "deno.exe" : "deno";
   const entry = unzipSync(zip, { filter: (f) => f.name === exe })[exe];
-  if (!entry) throw new LoomdocError(`The Deno release archive did not contain ${exe}.`);
+  if (!entry) throw new LoomdocError("SETUP_FAILED", `The Deno release archive did not contain ${exe}.`);
 
   const dest = managedToolPath("deno");
   await writeExecutable(dest, entry);
@@ -205,6 +205,7 @@ function verifyChecksum(data: Uint8Array, expected: string, name: string): void 
   const actual = sha256(data);
   if (actual !== expected) {
     throw new LoomdocError(
+      "SETUP_FAILED",
       `Checksum mismatch for ${name} (expected ${expected}, got ${actual}). Nothing was installed.`,
     );
   }
@@ -228,7 +229,7 @@ async function latestTag(repo: string): Promise<string> {
   const res = await request(`https://github.com/${repo}/releases/latest`, { redirect: "manual" });
   const location = res.headers.get("location") ?? "";
   const tag = /\/releases\/tag\/([^/?#]+)/.exec(location)?.[1];
-  if (!tag) throw new LoomdocError(`Could not determine the latest ${repo} release (HTTP ${res.status}).`);
+  if (!tag) throw new LoomdocError("NETWORK", `Could not determine the latest ${repo} release (HTTP ${res.status}).`);
   return decodeURIComponent(tag);
 }
 
@@ -242,7 +243,7 @@ async function fetchBytes(url: string): Promise<Uint8Array> {
 
 async function okResponse(url: string): Promise<Response> {
   const res = await request(url);
-  if (!res.ok) throw new LoomdocError(`Download failed (HTTP ${res.status}): ${url}`);
+  if (!res.ok) throw new LoomdocError("NETWORK", `Download failed (HTTP ${res.status}): ${url}`);
   return res;
 }
 
@@ -250,6 +251,6 @@ async function request(url: string, init: RequestInit = {}): Promise<Response> {
   try {
     return await fetch(url, { ...init, signal: AbortSignal.timeout(10 * 60_000) });
   } catch (err) {
-    throw new LoomdocError(`Network error downloading ${url}: ${err instanceof Error ? err.message : String(err)}`);
+    throw new LoomdocError("NETWORK", `Network error downloading ${url}: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
   }
 }

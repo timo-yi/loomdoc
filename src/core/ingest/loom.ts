@@ -48,6 +48,7 @@ export function parseLoomUrl(url: string): string {
   if (match?.[1]) return match[1].toLowerCase();
 
   throw new LoomdocError(
+    "UNSUPPORTED_URL",
     `Could not find a Loom video id in "${url}". Expected a share link like ` +
       `https://www.loom.com/share/<32-hex-id>.`,
   );
@@ -92,19 +93,19 @@ async function graphql<T>(operationName: string, query: string, variables: unkno
       body: JSON.stringify({ operationName, query, variables }),
     });
   } catch (err) {
-    throw new LoomdocError(`Network error contacting Loom (${operationName}): ${asMessage(err)}`);
+    throw new LoomdocError("NETWORK", `Network error contacting Loom (${operationName}): ${asMessage(err)}`, { cause: err });
   }
 
   if (!res.ok) {
-    throw new LoomdocError(`Loom GraphQL ${operationName} failed with HTTP ${res.status}.`);
+    throw new LoomdocError("NETWORK", `Loom GraphQL ${operationName} failed with HTTP ${res.status}.`);
   }
 
   const json = (await res.json()) as { data?: T; errors?: Array<{ message?: string }> };
   if (json.errors?.length) {
-    throw new LoomdocError(`Loom GraphQL ${operationName} error: ${json.errors[0]?.message ?? "unknown"}`);
+    throw new LoomdocError("SOURCE_UNAVAILABLE", `Loom GraphQL ${operationName} error: ${json.errors[0]?.message ?? "unknown"}`);
   }
   if (!json.data) {
-    throw new LoomdocError(`Loom GraphQL ${operationName} returned no data.`);
+    throw new LoomdocError("SOURCE_UNAVAILABLE", `Loom GraphQL ${operationName} returned no data.`);
   }
   return json.data;
 }
@@ -162,7 +163,7 @@ async function fetchStreamUrl(id: string): Promise<string> {
       ? "This is either a private/password-protected video (v1 supports public/unlisted only) or " +
         "your network is blocking loom.com (proxy/egress policy)."
       : "The video may be private, deleted, or password-protected (v1 supports public/unlisted only).";
-  throw new LoomdocError(`Could not resolve a video stream URL for ${id}${seen}. ${hint}`);
+  throw new LoomdocError("SOURCE_UNAVAILABLE", `Could not resolve a video stream URL for ${id}${seen}. ${hint}`);
 }
 
 interface SessionUrlResult {
@@ -242,6 +243,7 @@ async function fetchTranscript(id: string): Promise<TranscriptCue[]> {
   );
   if (urls.length === 0) {
     throw new LoomdocError(
+      "NO_TRANSCRIPT",
       `No transcript is available for this Loom video. loomdoc needs the transcript to work.`,
     );
   }
@@ -251,7 +253,7 @@ async function fetchTranscript(id: string): Promise<TranscriptCue[]> {
     if (cues.length > 0) return cues;
   }
 
-  throw new LoomdocError(`Loom returned a transcript URL but it was empty or unparseable.`);
+  throw new LoomdocError("NO_TRANSCRIPT", `Loom returned a transcript URL but it was empty or unparseable.`);
 }
 
 /** Fetch a transcript file and parse it, auto-detecting VTT vs JSON. */
@@ -261,10 +263,10 @@ async function downloadCues(url: string): Promise<TranscriptCue[]> {
   try {
     res = await fetch(url);
   } catch (err) {
-    throw new LoomdocError(`Network error fetching transcript file: ${asMessage(err)}`);
+    throw new LoomdocError("NETWORK", `Network error fetching transcript file: ${asMessage(err)}`, { cause: err });
   }
   if (!res.ok) {
-    throw new LoomdocError(`Failed to download transcript file (HTTP ${res.status}).`);
+    throw new LoomdocError("NETWORK", `Failed to download transcript file (HTTP ${res.status}).`);
   }
 
   const body = await res.text();
@@ -280,11 +282,11 @@ function assertHttpUrl(u: string, what: string): string {
   let parsed: URL;
   try {
     parsed = new URL(u);
-  } catch {
-    throw new LoomdocError(`Loom returned an invalid ${what} URL.`);
+  } catch (err) {
+    throw new LoomdocError("SOURCE_UNAVAILABLE", `Loom returned an invalid ${what} URL.`, { cause: err });
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    throw new LoomdocError(`Refusing non-HTTP ${what} URL from Loom (${parsed.protocol}).`);
+    throw new LoomdocError("SOURCE_UNAVAILABLE", `Refusing non-HTTP ${what} URL from Loom (${parsed.protocol}).`);
   }
   return u;
 }
