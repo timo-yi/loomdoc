@@ -93,6 +93,12 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (values.preset === "training") {
+    throw new Error('--preset training was replaced by --preset tutorial (or explanation, for the "why").');
+  }
+  if (values.preset === "support-article") {
+    throw new Error("--preset support-article was folded into --preset how-to. Add --audience customers for a help-center article.");
+  }
   if (values.preset !== undefined && !isStylePresetId(values.preset)) {
     throw new Error(`Unknown --preset "${values.preset}". Choose one of: ${STYLE_PRESET_IDS.join(", ")}.`);
   }

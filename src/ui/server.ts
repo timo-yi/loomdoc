@@ -190,7 +190,7 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       sendJson(res, 200, {
         presets: STYLE_PRESET_IDS.map((id) => {
           const p = STYLE_PRESETS[id];
-          return { id: p.id, label: p.label, summary: p.summary };
+          return { id: p.id, label: p.label, summary: p.summary, diataxis: p.diataxis ?? null };
         }),
         defaults: { formats: DEFAULT_FORMATS, pdfLayout: DEFAULT_PDF_LAYOUT, model: DEFAULT_MODEL, effort: DEFAULT_EFFORT },
         notices: options.setupNotices ? await options.setupNotices() : [],
