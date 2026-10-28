@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+# Drive loomdoc (CLI and `loomdoc ui`) for verification. Every command except `new` reads the
+# run directory from $LOOMDOC_RUN. See ../SKILL.md for the full recipe.
+set -euo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+# Not "loomdoc-*": loomdoc sweeps tmpdir entries with that prefix after 24h.
+TMP="${TMPDIR:-/tmp}"
+ROOT="${LOOMDOC_VERIFY_ROOT:-${TMP%/}/verify-loomdoc}"
+ROOT="${ROOT%/}"
+PLACEHOLDER_KEY="verify-placeholder-not-a-real-key"
+
+die() { echo "control-loomdoc: $*" >&2; exit 1; }
+
+run_dir() {
+  [ -n "${LOOMDOC_RUN:-}" ] || die "set LOOMDOC_RUN to the directory printed by 'control-loomdoc new'"
+  [ -d "$LOOMDOC_RUN/evidence" ] || die "$LOOMDOC_RUN is not a run directory (no evidence/)"
+  RUN="$LOOMDOC_RUN"; STATE="$RUN/state"; EVIDENCE="$RUN/evidence"
+}
+
+next_n() { # next sequence number for evidence files
+  local f="$STATE/seq" n=0
+  [ -f "$f" ] && n="$(cat "$f")"
+  n=$((n + 1)); echo "$n" > "$f"; printf '%02d' "$n"
+}
+
+need_ui() {
+  [ -f "$STATE/pid" ] || die "no UI started in this run (run 'start-ui' first)"
+  PID="$(cat "$STATE/pid")"; PORT="$(cat "$STATE/port")"; BASE="http://127.0.0.1:$PORT"
+}
+
+need_login() {
+  need_ui
+  [ -f "$STATE/cookies.txt" ] && [ -f "$STATE/request-token" ] || die "not logged in (run 'login' first)"
+  TOKEN="$(cat "$STATE/request-token")"
+}
+
+cmd_new() {
+  local id; id="$(date +%Y%m%d-%H%M%S)-$$"
+  mkdir -p "$ROOT/$id/evidence" "$ROOT/$id/state" "$ROOT/$id/out"
+  echo "$ROOT/$id"
+}
+
+cmd_cli() {
+  run_dir
+  [ "${1:-}" = "--" ] && shift
+  local n; n="$(next_n)"
+  local base="$EVIDENCE/cli-$n"
+  printf '%q ' loomdoc "$@" > "$base.cmd"; echo >> "$base.cmd"
+  local code=0
+  # stdin from /dev/null: no TTY, so preflight never prompts and never installs (unless --yes).
+  (cd "$REPO" && node --import tsx src/cli.ts "$@" < /dev/null > "$base.stdout" 2> "$base.stderr") || code=$?
+  echo "$code" > "$base.exit"
+  echo "== cli-$n: $(cat "$base.cmd")"
+  echo "-- exit: $code"
+  echo "-- stdout:"; cat "$base.stdout"
+  echo "-- stderr:"; cat "$base.stderr"
+}
+
+cmd_start_ui() {
+  run_dir
+  [ ! -f "$STATE/pid" ] || die "this run already started a UI (pid $(cat "$STATE/pid")); use a new run"
+  local key_mode=real
+  if [ "${1:-}" = "--placeholder-key" ]; then
+    [ -z "${ANTHROPIC_API_KEY:-}" ] || die "--placeholder-key refused: ANTHROPIC_API_KEY is already set"
+    export ANTHROPIC_API_KEY="$PLACEHOLDER_KEY"; key_mode=placeholder
+  fi
+  echo "$key_mode" > "$STATE/key-mode"
+  local log="$EVIDENCE/ui-server.log"
+  (cd "$REPO" && exec node --import tsx src/cli.ts ui --no-open --port 0 --out "$RUN/out" < /dev/null > "$log" 2>&1) &
+  local pid=$!
+  echo "$pid" > "$STATE/pid"
+  local url="" i
+  for i in $(seq 1 120); do
+    url="$(grep -oE 'http://127\.0\.0\.1:[0-9]+/\?token=[0-9a-f]+' "$log" | head -1 || true)"
+    [ -n "$url" ] && break
+    kill -0 "$pid" 2>/dev/null || { cat "$log" >&2; rm -f "$STATE/pid"; die "loomdoc ui exited before it was ready"; }
+    sleep 0.5
+  done
+  [ -n "$url" ] || { cat "$log" >&2; die "no private link after 60s (pid $pid still running; run 'stop')"; }
+  echo "$url" > "$STATE/launch-url"
+  echo "$url" | sed -E 's#^http://127\.0\.0\.1:([0-9]+)/.*#\1#' > "$STATE/port"
+  echo "ready: pid $pid, port $(cat "$STATE/port"), key: $key_mode"
+  echo "launch url (single use, spend it in ONE driver): $url"
+}
+
+cmd_login() {
+  run_dir; need_ui
+  local url; url="$(cat "$STATE/launch-url")"
+  local code
+  code="$(curl -sS -o /dev/null -w '%{http_code}' -c "$STATE/cookies.txt" "$url")"
+  [ "$code" = "303" ] || die "launch link returned $code, expected 303 (already spent by another driver?)"
+  curl -sS -b "$STATE/cookies.txt" -o "$EVIDENCE/page.html" "$BASE/"
+  sed -nE 's/.*name="loomdoc-token" content="([0-9a-f]+)".*/\1/p' "$EVIDENCE/page.html" | head -1 > "$STATE/request-token"
+  [ -s "$STATE/request-token" ] || die "page has no loomdoc-token meta (see $EVIDENCE/page.html)"
+  # The page carries the request token; keep the evidence copy free of it.
+  sed -i.bak -E 's/(name="loomdoc-token" content=")[0-9a-f]+/\1REDACTED/' "$EVIDENCE/page.html" && rm -f "$EVIDENCE/page.html.bak"
+  echo "logged in: launch link -> 303 + session cookie; request token captured"
+}
+
+cmd_doctor() {
+  run_dir; need_ui
+  kill -0 "$PID" 2>/dev/null || die "pid $PID is not running"
+  local owner; owner="$(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null | head -1 || true)"
+  [ "$owner" = "$PID" ] || die "port $PORT is owned by pid '${owner:-none}', not our pid $PID"
+  echo "process: pid $PID listening on 127.0.0.1:$PORT (key: $(cat "$STATE/key-mode"))"
+  if [ -f "$STATE/cookies.txt" ]; then
+    local body code
+    body="$(curl -sS -b "$STATE/cookies.txt" -w '\n%{http_code}' "$BASE/api/config")"
+    code="${body##*$'\n'}"; body="${body%$'\n'*}"
+    [ "$code" = "200" ] || die "GET /api/config returned $code: $body"
+    echo "session: valid; /api/config -> $body"
+  else
+    echo "session: not logged in yet"
+  fi
+}
+
+request() { # METHOD PATH [JSON]
+  local method="$1" path="$2" data="${3:-}"
+  local n; n="$(next_n)"
+  local base="$EVIDENCE/http-$n"
+  local args=(-sS -b "$STATE/cookies.txt" -X "$method" -D "$base.headers" -o "$base.body" -w '%{http_code}')
+  if [ "$method" = "POST" ]; then
+    local payload="$data"
+    [ -n "$payload" ] || payload='{}'
+    args+=(-H "X-Loomdoc-Token: $TOKEN" -H "Content-Type: application/json" --data-binary "$payload")
+  fi
+  echo "$method $path" > "$base.request"
+  [ -n "$data" ] && echo "$data" >> "$base.request"
+  local code; code="$(curl "${args[@]}" "$BASE$path")"
+  echo "$code" > "$base.status"
+  echo "== http-$n: $method $path -> $code"
+  cat "$base.body"; echo
+}
+
+cmd_get() { run_dir; need_login; request GET "$1"; }
+
+cmd_post() {
+  run_dir; need_login
+  local path="$1" data="${2:-}"
+  if [ "$path" = "/api/runs" ] && [ "$(cat "$STATE/key-mode")" = "real" ] && [ "${LOOMDOC_VERIFY_ALLOW_SPEND:-}" != "1" ]; then
+    die "POST /api/runs with a real key can start a paid run; set LOOMDOC_VERIFY_ALLOW_SPEND=1 after the user approves"
+  fi
+  request POST "$path" "$data"
+}
+
+cmd_stop() {
+  run_dir
+  if [ -f "$STATE/pid" ]; then
+    local pid; pid="$(cat "$STATE/pid")"
+    if kill -0 "$pid" 2>/dev/null; then
+      kill "$pid"
+      for _ in $(seq 1 20); do kill -0 "$pid" 2>/dev/null || break; sleep 0.25; done
+      kill -0 "$pid" 2>/dev/null && kill -9 "$pid"
+    fi
+    echo "stopped pid $pid"
+  fi
+  rm -rf "$STATE"  # cookies, tokens, pid; evidence/ and out/ stay
+  echo "evidence kept at: $EVIDENCE"
+}
+
+case "${1:-}" in
+  new) cmd_new ;;
+  cli) shift; cmd_cli "$@" ;;
+  start-ui) shift; cmd_start_ui "$@" ;;
+  login) cmd_login ;;
+  doctor) cmd_doctor ;;
+  get) cmd_get "${2:?path}" ;;
+  post) cmd_post "${2:?path}" "${3:-}" ;;
+  stop) cmd_stop ;;
+  *) die "usage: control-loomdoc new | cli -- <args> | start-ui [--placeholder-key] | login | doctor | get <path> | post <path> [json] | stop" ;;
+esac
