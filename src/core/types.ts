@@ -130,7 +130,9 @@ export interface LoomdocOptions {
   onProgress?: (event: ProgressEvent) => void;
 }
 
-export type ProgressStage = "ingest" | "frames" | "generate" | "render";
+/** The pipeline's stages, in the order a run reaches them. */
+export const PROGRESS_STAGES = ["ingest", "frames", "generate", "render"] as const;
+export type ProgressStage = (typeof PROGRESS_STAGES)[number];
 
 export interface ProgressEvent {
   stage: ProgressStage;

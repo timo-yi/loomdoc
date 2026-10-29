@@ -31,7 +31,7 @@ The rest of `src/`:
 - `src/core/types.ts` holds the shared types, the option lists (`OUTPUT_FORMATS`, `PDF_LAYOUTS`, `EFFORT_LEVELS`), and the defaults.
 - `src/core/util/` holds the child-process wrappers (`run-tool.ts`, `ffmpeg.ts`, `ytdlp.ts`), the scratch directory, and the transcript parsers.
 - `src/cli.ts` and `src/cli-flags.ts` are the command line.
-- `src/ui/server.ts` is the `loomdoc ui` HTTP server. `src/ui/page.ts` holds the page's HTML, CSS, and client JavaScript as strings.
+- `src/ui/server.ts` is the `loomdoc ui` HTTP server. `src/ui/page.ts` holds the page's HTML, CSS, and client JavaScript as strings. `src/ui/options.ts` holds the UI's labels for the core option lists and the form's length limits.
 - `src/setup/` checks for and installs `ffmpeg`, `yt-dlp`, and Deno.
 
 ## Follow the rules that keep the core safe
@@ -57,8 +57,8 @@ The rest of `src/`:
 1. Add the format's name to `OUTPUT_FORMATS` in `src/core/types.ts`. `DEFAULT_FORMATS` copies that list, so the new format is on by default for every run.
 2. Create `src/core/render/<format>.ts` with a function that writes the `LoomDoc` into `outputDir` and returns the file's path.
 3. Add an entry to `RENDERERS` in `src/core/render/index.ts`. `npm run typecheck` fails until you do.
-4. Add the file extension to `CONTENT_TYPES` in `src/ui/server.ts`. Without it the UI refuses to serve the file. If the format can run script in a browser (HTML, SVG), decide how to serve it safely first, because the UI serves output files from its own origin.
-5. Add a checkbox to the formats field and a label to `FILE_LABELS` in `src/ui/page.ts`. Update the `--formats` help text in `src/cli.ts` and the README.
+4. Add an entry to `FORMAT_DISPLAY` in `src/ui/options.ts` with the label, file extension, and content type. `npm run typecheck` fails until you do. The UI builds its checkbox, its file label, and the type it serves the file with from this entry. If the format can run script in a browser (HTML, SVG), decide how to serve it safely first, because the UI serves output files from its own origin.
+5. Update the `--formats` help text in `src/cli.ts` and the README.
 6. Add tests to `test/render.test.ts` that write a real file and check its content. Some tests match the list "markdown, docx, pdf", so update them too.
 
 ## Add a document style
@@ -78,7 +78,7 @@ An option has to reach the core from both the CLI and the UI. The compiler does 
 2. Check the value in `validateOptions` in `src/core/pipeline.ts`, and use it.
 3. CLI: add a parser to `src/cli-flags.ts`. In `src/cli.ts`, add the `parseArgs` entry, the help text, the parser call, and the field in the `runLoomdoc` call.
 4. UI server: add the field to `runRequestSchema` in `src/ui/server.ts` and map it in `execute()`. The schema silently drops a field it does not list.
-5. UI page: in `src/ui/page.ts`, add the control, read it in `collect()`, and save and restore it with the other preferences.
+5. UI page: in `src/ui/page.ts`, add the control, read it in `collect()`, and save and restore it with the other preferences. A new value in an existing list (`PDF_LAYOUTS`, `EFFORT_LEVELS`) needs no page change, only its label in `src/ui/options.ts`. The page renders those lists from `/api/config`.
 6. Add tests to `test/cli-flags.test.ts`, `test/library-validation.test.ts`, and `test/ui-server.test.ts`. Update the README.
 
 ## Write tests that check behavior

@@ -42,7 +42,7 @@ export function pageHtml(token: string): string {
 
     <section class="field">
       <label for="guidance" class="label">Guidance for the AI <span id="guidance-optional" class="muted">(optional)</span></label>
-      <textarea id="guidance" name="guidance" rows="4" maxlength="4000"
+      <textarea id="guidance" name="guidance" rows="4"
         placeholder="For example: The prospect is a mid-size logistics company worried about onboarding time. Emphasize the reporting dashboard and skip the billing settings."></textarea>
       <p id="guidance-hint" class="hint">Anything the AI should know or do: who it is for, what to emphasize or skip, tone, terminology.</p>
     </section>
@@ -50,36 +50,23 @@ export function pageHtml(token: string): string {
     <details class="field group">
       <summary>Audience and context <span class="muted">(optional, inferred from the video if blank)</span></summary>
       <div class="grid">
-        <label>Audience<input name="audience" maxlength="300" placeholder="e.g. new support agents"></label>
-        <label>Their role<input name="role" maxlength="300" placeholder="e.g. operations manager"></label>
-        <label>Industry<input name="industry" maxlength="300" placeholder="e.g. logistics"></label>
-        <label>Use case<input name="useCase" maxlength="300" placeholder="e.g. weekly reporting"></label>
+        <label>Audience<input name="audience" placeholder="e.g. new support agents"></label>
+        <label>Their role<input name="role" placeholder="e.g. operations manager"></label>
+        <label>Industry<input name="industry" placeholder="e.g. logistics"></label>
+        <label>Use case<input name="useCase" placeholder="e.g. weekly reporting"></label>
       </div>
     </details>
 
     <details class="field group">
       <summary>Output options</summary>
-      <div class="formats" role="group" aria-label="Formats">
-        <label class="check"><input type="checkbox" name="formats" value="markdown"> Markdown</label>
-        <label class="check"><input type="checkbox" name="formats" value="docx"> Word (.docx)</label>
-        <label class="check"><input type="checkbox" name="formats" value="pdf"> PDF</label>
-      </div>
+      <div id="formats" class="formats" role="group" aria-label="Formats"></div>
       <div class="grid">
         <label>PDF layout
-          <select name="pdfLayout">
-            <option value="pageless">Pageless (one continuous page)</option>
-            <option value="paged">Pages (for printing)</option>
-          </select>
+          <select name="pdfLayout"></select>
         </label>
-        <label>Model<input name="model" maxlength="100" spellcheck="false"></label>
+        <label>Model<input name="model" spellcheck="false"></label>
         <label>Effort
-          <select name="effort">
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-            <option value="xhigh">Extra high</option>
-            <option value="max">Max</option>
-          </select>
+          <select name="effort"></select>
         </label>
       </div>
     </details>
@@ -302,12 +289,6 @@ export const APP_JS = `
 "use strict";
 (function () {
   var token = document.querySelector('meta[name="loomdoc-token"]').getAttribute("content");
-  var STAGES = [
-    ["ingest", "Download the video and transcript"],
-    ["frames", "Pick the distinct screens"],
-    ["generate", "Write the document"],
-    ["render", "Save the files"]
-  ];
   var PREF_KEY = "loomdoc.prefs";
 
   var $ = function (id) { return document.getElementById(id); };
@@ -335,7 +316,7 @@ export const APP_JS = `
 
   function selectedPreset() {
     var checked = presetsBox.querySelector("input:checked");
-    return checked ? checked.value : "how-to";
+    return checked ? checked.value : config.defaults.preset;
   }
 
   /** The preset with this id if it needs guidance, else null. */
@@ -351,7 +332,7 @@ export const APP_JS = `
     presetsBox.textContent = "";
     // A saved preference can name a preset that no longer exists (e.g. the old "training" or "support-article").
     var known = presets.some(function (p) { return p.id === current; });
-    if (!known) current = "how-to";
+    if (!known) current = config.defaults.preset;
     var technical = presets.filter(function (p) { return p.diataxis; });
     var other = presets.filter(function (p) { return !p.diataxis; });
     if (technical.length > 0) {
@@ -383,6 +364,43 @@ export const APP_JS = `
       grid.appendChild(label);
     });
     return grid;
+  }
+
+  function renderOptions(options) {
+    var formatsBox = $("formats");
+    formatsBox.textContent = "";
+    options.formats.forEach(function (f) {
+      var label = el("label", "check");
+      var input = document.createElement("input");
+      input.type = "checkbox";
+      input.name = "formats";
+      input.value = f.id;
+      label.appendChild(input);
+      label.appendChild(document.createTextNode(" " + f.label));
+      formatsBox.appendChild(label);
+    });
+    fillSelect(form.elements.pdfLayout, options.pdfLayouts);
+    fillSelect(form.elements.effort, options.efforts);
+    var limits = options.limits;
+    $("url").maxLength = limits.url;
+    $("guidance").maxLength = limits.guidance;
+    ["audience", "role", "industry", "useCase"].forEach(function (name) { form.elements[name].maxLength = limits.contextField; });
+    form.elements.model.maxLength = limits.model;
+  }
+
+  function fillSelect(select, items) {
+    select.textContent = "";
+    items.forEach(function (item) {
+      var option = el("option", null, item.label);
+      option.value = item.id;
+      select.appendChild(option);
+    });
+  }
+
+  // A saved value can name an option that no longer exists; fall back rather than select nothing.
+  function restoreSelect(select, saved, fallback) {
+    select.value = saved || fallback;
+    if (!select.value) select.value = fallback;
   }
 
   function syncPresetUi() {
@@ -423,9 +441,9 @@ export const APP_JS = `
       industry: String(data.get("industry") || ""),
       useCase: String(data.get("useCase") || ""),
       formats: data.getAll("formats").map(String),
-      pdfLayout: String(data.get("pdfLayout") || "pageless"),
+      pdfLayout: String(data.get("pdfLayout") || config.defaults.pdfLayout),
       model: String(data.get("model") || "").trim(),
-      effort: String(data.get("effort") || "medium")
+      effort: String(data.get("effort") || config.defaults.effort)
     };
     return body;
   }
@@ -451,9 +469,9 @@ export const APP_JS = `
   function resetProgress() {
     var stages = $("stages");
     stages.textContent = "";
-    STAGES.forEach(function (s) {
-      var li = el("li", null, s[1]);
-      li.dataset.stage = s[0];
+    config.options.stages.forEach(function (s) {
+      var li = el("li", null, s.label);
+      li.dataset.stage = s.id;
       stages.appendChild(li);
     });
     $("log").textContent = "";
@@ -479,7 +497,7 @@ export const APP_JS = `
     resetProgress();
     setBusy(true);
     var source = new EventSource("/api/runs/" + runId + "/events");
-    var lastStage = "ingest";
+    var lastStage = config.options.stages[0].id;
     // The server replays the whole run on every (re)connection; skip events already shown.
     var seen = 0;
     var index = 0;
@@ -504,7 +522,7 @@ export const APP_JS = `
       } else if (event.type === "done") {
         source.close();
         finish();
-        STAGES.forEach(function (s) { markStage(s[0], "done"); });
+        config.options.stages.forEach(function (s) { markStage(s.id, "done"); });
         showResult(runId, event.result);
       } else if (event.type === "error") {
         source.close();
@@ -531,7 +549,14 @@ export const APP_JS = `
     setBusy(false);
   }
 
-  var FILE_LABELS = { ".md": "Markdown", ".docx": "Word", ".pdf": "PDF" };
+  function fileLabel(name) {
+    var ext = name.slice(name.lastIndexOf("."));
+    var formats = config.options.formats;
+    for (var i = 0; i < formats.length; i++) {
+      if (formats[i].extension === ext) return formats[i].label;
+    }
+    return name;
+  }
 
   function showResult(runId, result) {
     $("progress").hidden = true;
@@ -539,8 +564,7 @@ export const APP_JS = `
     var files = $("files");
     files.textContent = "";
     result.files.forEach(function (f) {
-      var ext = f.name.slice(f.name.lastIndexOf("."));
-      var a = el("a", null, "Open " + (FILE_LABELS[ext] || f.name));
+      var a = el("a", null, "Open " + fileLabel(f.name));
       a.href = f.href;
       a.target = "_blank";
       a.rel = "noopener";
@@ -633,6 +657,7 @@ export const APP_JS = `
   form.addEventListener("submit", function (e) {
     e.preventDefault();
     showError("");
+    if (!config) { showError("Settings have not loaded. Reload the page."); return; }
     var body = collect();
     var problem = validate(body);
     if (problem) { showError(problem); return; }
@@ -658,13 +683,20 @@ export const APP_JS = `
     return r.json();
   }).then(function (cfg) {
     config = cfg;
+    showError("");
     var prefs = loadPrefs();
-    renderPresets(cfg.presets, prefs.preset || "how-to");
-    var formats = prefs.formats || cfg.defaults.formats;
-    form.querySelectorAll('input[name="formats"]').forEach(function (c) { c.checked = formats.indexOf(c.value) !== -1; });
+    // Render the option controls before restoring preferences into them.
+    renderOptions(cfg.options);
+    renderPresets(cfg.presets, prefs.preset || cfg.defaults.preset);
+    var boxes = form.querySelectorAll('input[name="formats"]');
+    // Saved formats the server no longer offers would leave nothing checked; use the defaults instead.
+    var formats = Array.isArray(prefs.formats) ? prefs.formats : [];
+    var known = Array.prototype.some.call(boxes, function (c) { return formats.indexOf(c.value) !== -1; });
+    if (!known) formats = cfg.defaults.formats;
+    boxes.forEach(function (c) { c.checked = formats.indexOf(c.value) !== -1; });
     form.elements.model.value = prefs.model || cfg.defaults.model;
-    form.elements.effort.value = prefs.effort || cfg.defaults.effort;
-    form.elements.pdfLayout.value = prefs.pdfLayout || cfg.defaults.pdfLayout;
+    restoreSelect(form.elements.effort, prefs.effort, cfg.defaults.effort);
+    restoreSelect(form.elements.pdfLayout, prefs.pdfLayout, cfg.defaults.pdfLayout);
     showNotices(cfg.notices || []);
     if (cfg.activeRunId) follow(cfg.activeRunId);
   }).catch(function (err) {

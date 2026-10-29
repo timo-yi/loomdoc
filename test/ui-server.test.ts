@@ -5,7 +5,15 @@ import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startUiServer, type UiServer } from "../src/ui/server.js";
-import type { LoomdocOptions, LoomdocResult } from "../src/core/types.js";
+import { DEFAULT_PRESET } from "../src/core/generate/styles.js";
+import {
+  EFFORT_LEVELS,
+  OUTPUT_FORMATS,
+  PDF_LAYOUTS,
+  PROGRESS_STAGES,
+  type LoomdocOptions,
+  type LoomdocResult,
+} from "../src/core/types.js";
 import { LoomdocError } from "../src/core/util/errors.js";
 
 interface Reply {
@@ -243,6 +251,46 @@ test("validates input, refuses concurrent runs, and reports setup problems", asy
   } finally {
     await blocked.server.close();
     await rm(blocked.dir, { recursive: true, force: true });
+  }
+});
+
+test("config lists every core option in order, so the page hard-codes none", async () => {
+  const s = await setup();
+  try {
+    type Item = { id: string; label: string };
+    const config = JSON.parse((await send(s.server.port, "/api/config", { headers: { cookie: s.cookie } })).body) as {
+      options: { formats: (Item & { extension: string })[]; pdfLayouts: Item[]; efforts: Item[]; stages: Item[]; limits: Record<string, number> };
+      defaults: { preset: string };
+    };
+    const { options } = config;
+    assert.deepEqual(options.formats.map((f) => f.id), [...OUTPUT_FORMATS]);
+    assert.deepEqual(options.pdfLayouts.map((l) => l.id), [...PDF_LAYOUTS]);
+    assert.deepEqual(options.efforts.map((e) => e.id), [...EFFORT_LEVELS]);
+    assert.deepEqual(options.stages.map((st) => st.id), [...PROGRESS_STAGES]);
+    for (const item of [...options.formats, ...options.pdfLayouts, ...options.efforts, ...options.stages]) {
+      assert.ok(item.label.length > 0, `${item.id} has a label`);
+    }
+    assert.ok(options.formats.every((f) => f.extension.startsWith(".")));
+    assert.deepEqual(options.limits, { url: 2048, guidance: 4000, contextField: 300, model: 100 });
+    assert.equal(config.defaults.preset, DEFAULT_PRESET);
+    const valid = { url: "https://www.loom.com/share/abc", preset: "how-to", formats: ["pdf"] };
+    const limitOf: Record<string, number> = {
+      url: options.limits.url!,
+      guidance: options.limits.guidance!,
+      audience: options.limits.contextField!,
+      role: options.limits.contextField!,
+      industry: options.limits.contextField!,
+      useCase: options.limits.contextField!,
+      model: options.limits.model!,
+    };
+    for (const [field, limit] of Object.entries(limitOf)) {
+      const tooLong = JSON.stringify({ ...valid, [field]: "x".repeat(limit + 1) });
+      assert.equal((await postRun(s, tooLong)).status, 400, `the server enforces the ${field} limit it sends`);
+    }
+    assert.notEqual((await postRun(s, JSON.stringify(valid))).status, 400, "the base request is valid");
+  } finally {
+    await s.server.close();
+    await rm(s.dir, { recursive: true, force: true });
   }
 });
 
