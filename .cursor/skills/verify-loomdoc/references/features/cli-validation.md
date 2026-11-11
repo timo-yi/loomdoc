@@ -35,4 +35,4 @@ Preconditions:
 
 - An unknown `--preset` lists the ids from `src/core/generate/styles.ts`. Compare the output with that file.
 - A valid flag set with no `ANTHROPIC_API_KEY` fails in the setup check. That is [Setup doctor](doctor.md), not a validation failure.
-- With a real `ANTHROPIC_API_KEY` set, the helper refuses a command that would generate a document unless `LOOMDOC_VERIFY_ALLOW_SPEND=1`. Flag checks do not need the key, so unset it for this feature.
+- With a real `ANTHROPIC_API_KEY` set, `cli` refuses to spawn loomdoc when the first argument is not `doctor`, `ui`, or `--help`, unless `LOOMDOC_VERIFY_ALLOW_SPEND=1`. Flag checks do not need the key, so unset it for this feature.

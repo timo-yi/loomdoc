@@ -20,7 +20,13 @@ A generation calls Anthropic and spends the user's API credit. Ask the user befo
 
 `up --placeholder-key` sets a fake `ANTHROPIC_API_KEY` on the UI process only. The setup check is presence-only, so the page can start, and the key cannot spend money. The command refuses to run when a real key is already set.
 
-With a real key, the helper refuses a CLI generation, a click on **Generate document**, Enter, and `POST /api/runs` unless `LOOMDOC_VERIFY_ALLOW_SPEND=1`. Set that only after the user approves. Never pass `--yes` or `-y`. Those flags install ffmpeg, yt-dlp, or Deno.
+With a real key and without `LOOMDOC_VERIFY_ALLOW_SPEND=1`:
+
+- `cli` will not spawn loomdoc when its first argument is not `doctor`, `ui`, or `--help`.
+- A POST to `/api/runs` does not leave the browser. Chrome fails that request before the server sees it, whether a click, Enter in a field, `requestSubmit()`, or `eval` asked for it.
+- `http post` refuses the same endpoint when the path's pathname, with a trailing slash removed, is `/api/runs`. That includes `/api/runs/`, `/api/runs?x=1`, and `//api/runs`.
+
+The placeholder key does not enable the block, so the form checks and the missing-video run still reach the server. Set the spend flag only after the user approves. Never pass `--yes` or `-y`. Those flags install ffmpeg, yt-dlp, or Deno.
 
 ## Launch
 

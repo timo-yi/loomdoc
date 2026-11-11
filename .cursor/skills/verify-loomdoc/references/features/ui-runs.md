@@ -37,4 +37,4 @@ Preconditions:
 - This URL does not prove the "no transcript" error. That message belongs to a video Loom can find.
 - A placeholder key never reaches the model on this URL, because ingest fails first. Do not describe that as a finished document.
 - Proving that `/files/` rejects path traversal needs a finished run, so it belongs to [Generate a document](generate.md).
-- `POST /api/runs` with a real key is refused unless `LOOMDOC_VERIFY_ALLOW_SPEND=1`. Do not set it for this feature.
+- With a real key, a POST whose path is `/api/runs` (including a trailing slash, a query string, or a doubled slash) is refused before the server handles it, unless `LOOMDOC_VERIFY_ALLOW_SPEND=1`. Do not set it for this feature. The placeholder key still lets the missing-video run reach the server.

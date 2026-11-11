@@ -448,6 +448,7 @@ function connectCdp(wsUrl) {
     socket.addEventListener("open", () => resolve());
     socket.addEventListener("error", () => reject(new Error("Could not open the Chrome DevTools socket.")));
   });
+  const listeners = new Map();
   socket.addEventListener("message", (ev) => {
     const text = typeof ev.data === "string" ? ev.data : String(ev.data);
     let msg;
@@ -456,14 +457,23 @@ function connectCdp(wsUrl) {
     } catch {
       return;
     }
-    if (!msg.id || !pending.has(msg.id)) return;
-    const { resolve, reject } = pending.get(msg.id);
-    pending.delete(msg.id);
-    if (msg.error) reject(new Error(msg.error.message || "Chrome DevTools call failed."));
-    else resolve(msg.result ?? {});
+    if (msg.id && pending.has(msg.id)) {
+      const { resolve, reject } = pending.get(msg.id);
+      pending.delete(msg.id);
+      if (msg.error) reject(new Error(msg.error.message || "Chrome DevTools call failed."));
+      else resolve(msg.result ?? {});
+      return;
+    }
+    if (msg.method) {
+      for (const fn of listeners.get(msg.method) ?? []) fn(msg.params ?? {});
+    }
   });
   return {
     ready,
+    on(method, fn) {
+      if (!listeners.has(method)) listeners.set(method, []);
+      listeners.get(method).push(fn);
+    },
     send(method, params = {}) {
       const id = ++next;
       return ready.then(() => new Promise((resolve, reject) => {
@@ -501,15 +511,91 @@ async function withPage(state, fn) {
     );
   }
   const cdp = connectCdp(page.webSocketDebuggerUrl);
+  const guard = { blocked: null };
+  let armed = false;
   try {
     await cdp.ready;
     await cdp.send("Runtime.enable");
     await cdp.send("Page.enable");
     await cdp.send("Page.bringToFront").catch(() => {});
     await evaluate(cdp, HOOK);
-    return await fn(cdp);
+    armed = await armSpendGuard(cdp, state, guard);
+    try {
+      return await fn(cdp);
+    } finally {
+      if (armed) await observeSpendGuard(cdp, guard);
+    }
   } finally {
+    if (armed) await cdp.send("Fetch.disable").catch(() => {});
     cdp.close();
+  }
+}
+
+function collapsePath(pathname) {
+  return pathname.replace(/\/{2,}/g, "/").replace(/\/+$/, "") || "/";
+}
+
+function isRunStartPost(method, raw, base) {
+  if (String(method || "GET").toUpperCase() !== "POST") return false;
+  const input = String(raw);
+  const paths = [];
+  try {
+    paths.push(new URL(input, base).pathname);
+  } catch {
+    /* not a URL */
+  }
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(input)) paths.push(input.split(/[?#]/)[0]);
+  return paths.some((pathname) => collapsePath(pathname) === "/api/runs");
+}
+
+const SPEND_HINT = "Ask the user before spending. After they approve, export LOOMDOC_VERIFY_ALLOW_SPEND=1 and run the command again. Omit the export to keep the guard.";
+
+function spendBlocked(state) {
+  return state?.keyMode === "real" && process.env.LOOMDOC_VERIFY_ALLOW_SPEND !== "1";
+}
+
+function refuseSpend(url, activeRunId) {
+  const extra = {};
+  if (url) extra.url = url;
+  if (activeRunId !== undefined) extra.activeRunId = activeRunId;
+  fail("Refusing to POST /api/runs while a real API key is set.", SPEND_HINT, extra);
+}
+
+async function armSpendGuard(cdp, state, guard) {
+  if (!spendBlocked(state)) return false;
+  const base = state.pageUrl || `http://127.0.0.1:${state.uiPort}/`;
+  cdp.on("Fetch.requestPaused", (params) => {
+    const method = params.request?.method ?? "GET";
+    const url = params.request?.url ?? "";
+    if (isRunStartPost(method, url, base)) {
+      guard.blocked = url;
+      cdp.send("Fetch.failRequest", { requestId: params.requestId, errorReason: "BlockedByClient" }).catch(() => {});
+      return;
+    }
+    cdp.send("Fetch.continueRequest", { requestId: params.requestId }).catch(() => {});
+  });
+  await cdp.send("Fetch.enable", {
+    patterns: [{ urlPattern: "*api/runs*", requestStage: "Request" }],
+  });
+  return true;
+}
+
+async function observeSpendGuard(cdp, guard) {
+  const started = Date.now();
+  while (Date.now() - started < 300) {
+    if (guard.blocked) {
+      let activeRunId;
+      try {
+        activeRunId = await evaluate(
+          cdp,
+          `fetch("/api/config").then((r) => r.json()).then((j) => j.activeRunId ?? null)`,
+        );
+      } catch {
+        activeRunId = "unreadable";
+      }
+      refuseSpend(guard.blocked, activeRunId);
+    }
+    await sleep(20);
   }
 }
 
@@ -571,6 +657,7 @@ async function waitFor(state, predicate, timeoutMs, label) {
       last = await withPage(state, (cdp) => evaluate(cdp, predicate));
       if (last) return last;
     } catch (err) {
+      if (err instanceof Fail) throw err;
       last = err instanceof Error ? err.message : String(err);
     }
     await sleep(200);
@@ -584,15 +671,6 @@ function requireState(run) {
     fail("This run has no loomdoc page.", "Run `up --placeholder-key` with the same --run directory.");
   }
   return state;
-}
-
-function assertSpendAllowed(state, action) {
-  if (state?.keyMode !== "real") return;
-  if (process.env.LOOMDOC_VERIFY_ALLOW_SPEND === "1") return;
-  fail(
-    `${action} can start a paid Anthropic run.`,
-    "Ask the user before spending. After they approve, export LOOMDOC_VERIFY_ALLOW_SPEND=1 and run the command again. Omit the export to keep the guard.",
-  );
 }
 
 function axLines(nodes) {
@@ -1197,9 +1275,6 @@ async function cmdBrowser(parsed) {
   rejectUnknown(parsed, spec.flags);
   const run = requireRun(parsed.flags);
   const state = requireState(run);
-  if ((sub === "click" && (parsed.kv.selector === "#submit" || parsed.kv.name === "Generate document")) || (sub === "press" && parsed.kv.key === "Enter")) {
-    assertSpendAllowed(state, sub === "press" ? "Pressing Enter" : "Clicking Generate document");
-  }
   const result = await spec.run(run, state, parsed.kv);
   ok({ command: `browser ${sub}`, run, ...result });
 }
@@ -1340,7 +1415,7 @@ async function cmdHttp(parsed) {
   rejectUnknown(parsed, []);
   const run = requireRun(parsed.flags);
   const state = requireState(run);
-  if (method === "POST" && urlPath === "/api/runs") assertSpendAllowed(state, "POST /api/runs");
+  if (isRunStartPost(method, urlPath, state.pageUrl || "http://127.0.0.1/")) refuseSpend(urlPath);
   const body = parsed.positionals[3];
   if (method === "POST" && body) {
     try {
@@ -1403,8 +1478,9 @@ Commands:
   stop                           Stop only the processes this run started. Keeps evidence/ and out/.
                                  --dry-run prints the pids and does not signal them.
 
-A paid document needs the user to approve first. With a real key, cli generation, Generate document,
-Enter, and POST /api/runs fail until LOOMDOC_VERIFY_ALLOW_SPEND=1.
+A paid document needs the user to approve first. With a real key, a cli generation is refused,
+and any POST whose path is /api/runs is refused, until LOOMDOC_VERIFY_ALLOW_SPEND=1.
+The page guard is the request Chrome is about to send, not the wording of click, press, or eval.
 
 Example, no spend:
   node .cursor/skills/verify-loomdoc/control-loomdoc.mjs cli -- --help

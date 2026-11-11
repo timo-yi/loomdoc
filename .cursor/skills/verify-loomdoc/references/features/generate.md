@@ -32,6 +32,6 @@ Preconditions:
 ## Gotchas
 
 - This feature was not run while the verification skill was created. There was no API key and no approval to spend. Do not mark it verified from [UI runs](ui-runs.md). That path stops at ingest.
-- The helper refuses the CLI command, the **Generate document** click, Enter, and `POST /api/runs` until `LOOMDOC_VERIFY_ALLOW_SPEND=1` is set. A screenshot of the form is not a substitute.
+- With a real key, the helper will not spawn a loomdoc generation, and Chrome fails a POST to `/api/runs` before the server sees it, until `LOOMDOC_VERIFY_ALLOW_SPEND=1` is set. The block is the request, not the wording of the click or key. A screenshot of the form is not a substitute.
 - `--formats markdown,pdf` omits Word on purpose, so the proof can show that the flag was honored.
 - A symlink inside the output directory that resolves outside it is refused. A symlink that stays inside the directory is still served. Check the real path, not the link's name.
