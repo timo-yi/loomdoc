@@ -92,5 +92,5 @@ An option has to reach the core from both the CLI and the UI. The compiler does 
 ## Open a pull request
 
 - Keep each commit to one change, with an imperative subject ("Validate the preset in runLoomdoc"). In the body, say why the change is needed.
-- Say in the description how you checked the change, beyond the unit tests. For changes a user can see, `.claude/skills/verify-loomdoc/` has scripts that drive the CLI and the UI without spending money.
+- Say in the description how you checked the change, beyond the unit tests. For changes a user can see, `.cursor/skills/verify-loomdoc/SKILL.md` tells you how to drive the CLI and the page without spending money.
 - If the change alters a design decision, update the matching entry in `docs/PRD.md`.
